@@ -1,0 +1,28 @@
+# Node
+node_modules/
+*.log
+.DS_Store
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Environment — real keys never committed
+.env
+.env.local
+
+# Supabase local
+supabase/.temp/
+supabase/.branches/
+
+# Leftover pre-workspace copies (superseded by apps/*) — kept on disk, not committed
+/mobile/
+/supabase/
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+Thumbs.db

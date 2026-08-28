@@ -1,0 +1,20 @@
+{
+  "name": "bond",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Bond — a privacy-first platform for trusted connections.",
+  "workspaces": [
+    "apps/mobile",
+    "apps/backend",
+    "apps/web",
+    "apps/site"
+  ],
+  "scripts": {
+    "mobile": "npm run start --workspace apps/mobile",
+    "mobile:ios": "npm run ios --workspace apps/mobile",
+    "backend": "npm run dev --workspace apps/backend",
+    "web": "npm run dev --workspace apps/web",
+    "site": "npm run dev --workspace apps/site",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}
