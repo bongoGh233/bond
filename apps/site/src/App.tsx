@@ -99,11 +99,11 @@ function Hero() {
 /* Features                                                            */
 /* ------------------------------------------------------------------ */
 const coreFeatures = [
-  { icon: icons.chat, title: 'Private messaging', desc: 'Fast, beautiful conversations with the people you trust — text, photos, videos, voice and files.' },
+  { icon: icons.chat, title: 'Private messaging', desc: 'Beautiful conversations with the people you trust — text, photos and voice.' },
   { icon: icons.lock, title: 'Bond Lock', desc: 'Protect sensitive media. Recipients can see it exists, but only get access when you approve — one-time or for a limited window.' },
   { icon: icons.pulse, title: 'I Need You', desc: 'A permission-based alert that tells a trusted connection you need them now. Opt-in, quiet hours, full control.' },
   { icon: icons.moments, title: 'Moments', desc: 'Temporary updates that disappear — from a few hours to permanent. You choose who sees each one.' },
-  { icon: icons.heart, title: 'Heartbeat', desc: 'A subtle, optional sense of presence. See when you and a trusted connection are connected — and switch it off anytime.' },
+  { icon: icons.chat, title: 'Notifications', desc: 'In-app and push notifications for messages, alerts, surprise boxes and connection requests — without leaking content.' },
   { icon: icons.history, title: 'Shared space', desc: 'Timelines, memories and bucket lists you curate together with the people who matter.' },
   { icon: icons.mic, title: 'Voice diary', desc: 'Private or shared voice entries. Leave thoughts for yourself or trusted connections.' },
   { icon: icons.gift, title: 'Surprise box', desc: 'Prepare a message, photo or memory that opens on a chosen date — a surprise for someone special.' },
@@ -221,7 +221,7 @@ function Privacy() {
               say exactly what we do and don't provide.
             </p>
             <p className="muted" style={{ marginTop: 12, fontSize: '0.9rem' }}>
-              No fake security, ever. See the <a href="https://github.com/" style={{ color: 'var(--primary)' }}>security notes</a>.
+              No fake security, ever. See the <a href="https://github.com/bongoGh233/bond/blob/main/apps/backend/docs/security.md" style={{ color: 'var(--primary)' }}>security notes</a>.
             </p>
           </div>
         </div>
@@ -238,13 +238,14 @@ function Download() {
     <section className="section section-alt" id="download">
       <div className="container center" style={{ maxWidth: 640 }}>
         <span className="eyebrow">Get Bond</span>
-        <h2 className="h2">Your private space is one download away</h2>
+        <h2 className="h2">Try the prototype, see the code</h2>
         <p className="lead" style={{ margin: '16px 0 32px' }}>
-          Available on iPhone and web. Android support coming soon.
+          Bond is an early prototype. The web companion runs in your browser and the
+          native apps are in active development — watch the repo for builds.
         </p>
         <div className="hero-cta" style={{ justifyContent: 'center' }}>
-          <a className="btn btn-primary" href="#download">Available soon · App Store</a>
-          <a className="btn btn-secondary" href="#download">Web companion</a>
+          <a className="btn btn-primary" href="https://github.com/bongoGh233/bond">View the project on GitHub</a>
+          <a className="btn btn-secondary" href="#features">Explore the features</a>
         </div>
       </div>
     </section>

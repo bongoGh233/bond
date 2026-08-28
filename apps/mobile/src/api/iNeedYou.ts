@@ -223,3 +223,23 @@ export function previewRecipientName(recipientId: string): string {
   const known: Record<string, string> = { 'p-alice': 'Alice', 'p-ben': 'Ben', 'p-maya': 'Maya', 'p-rosa': 'Rosa' };
   return known[recipientId] ?? recipientId;
 }
+
+/**
+ * Live-update alerts in real time (backend mode only). RLS ensures only
+ * alerts the user participates in are delivered. Returns an unsubscribe fn.
+ */
+export function subscribeToAlerts(userId: string, onChange: () => void): () => void {
+  if (!isBackendConfigured || !supabase) return () => {};
+  const client = supabase;
+  const channel = client
+    .channel(`i_need_you_${userId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'i_need_you' },
+      () => onChange()
+    )
+    .subscribe();
+  return () => {
+    client.removeChannel(channel);
+  };
+}

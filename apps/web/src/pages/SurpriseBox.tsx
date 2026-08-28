@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth';
 import { Avatar } from '../components/Avatar';
+import { RecipientPicker, useRecipients } from '../components/RecipientPicker';
 import {
   createSurprise,
   deleteSurprise,
@@ -9,13 +10,6 @@ import {
   type SurpriseBox,
 } from '../api/surpriseBox';
 import { formatDate, timeAgo } from '../utils';
-
-const RECIPIENTS = [
-  { id: 'p-alice', name: 'Alice' },
-  { id: 'p-ben', name: 'Ben' },
-  { id: 'p-maya', name: 'Maya' },
-  { id: 'p-rosa', name: 'Rosa' },
-];
 
 const REVEAL_PRESETS = [
   { label: 'Tomorrow', ms: 1000 * 60 * 60 * 24 },
@@ -27,10 +21,11 @@ const REVEAL_PRESETS = [
 export function SurpriseBoxes() {
   const { session } = useAuth();
   const me = session?.userId ?? 'you';
+  const { options: recipientOptions } = useRecipients(me);
   const [boxes, setBoxes] = useState<SurpriseBox[]>([]);
   const [opened, setOpened] = useState<Record<string, string | undefined>>({});
 
-  const [recipient, setRecipient] = useState('p-alice');
+  const [recipient, setRecipient] = useState('');
   const [message, setMessage] = useState('');
   const [revealPicker, setRevealPicker] = useState<number>(REVEAL_PRESETS[0].ms);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +40,12 @@ export function SurpriseBoxes() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (recipientOptions.length > 0 && !recipientOptions.some((o) => o.id === recipient)) {
+      setRecipient(recipientOptions[0].id);
+    }
+  }, [recipientOptions, recipient]);
 
   const schedule = async () => {
     setBusy(true);
@@ -94,13 +95,7 @@ export function SurpriseBoxes() {
         <div className="card" style={{ padding: 16 }}>
           <div className="field">
             <label className="field-label">For</label>
-            <div className="seg" role="group" aria-label="Recipient">
-              {RECIPIENTS.map((r) => (
-                <button key={r.id} className={'seg-btn' + (recipient === r.id ? ' active' : '')} onClick={() => setRecipient(r.id)}>
-                  {r.name}
-                </button>
-              ))}
-            </div>
+            <RecipientPicker options={recipientOptions} value={recipient} onChange={setRecipient} />
           </div>
           <div className="field">
             <label className="field-label">Message to reveal</label>
@@ -123,7 +118,7 @@ export function SurpriseBoxes() {
             </div>
           </div>
           {error ? <div className="field-error" style={{ marginBottom: 10 }}>{error}</div> : null}
-          <button className="btn btn-primary" style={{ width: '100%' }} disabled={busy || !message.trim()} onClick={schedule}>
+          <button className="btn btn-primary" style={{ width: '100%' }} disabled={busy || !recipient || !message.trim()} onClick={schedule}>
             {busy ? 'Scheduling…' : '🎁 Wrap it'}
           </button>
         </div>

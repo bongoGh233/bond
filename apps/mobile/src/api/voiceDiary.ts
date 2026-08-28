@@ -1,4 +1,5 @@
 import { supabase, isBackendConfigured } from './supabase';
+import { uploadBondMedia } from './media';
 
 export type VoiceAudience = 'private' | 'connections' | 'space';
 
@@ -56,6 +57,13 @@ function toEntry(r: VoiceDiaryRow, author: AuthorEmbed | null, myId: string): Vo
 function isExpired(e: VoiceDiaryEntry): boolean {
   if (!e.expiresAt) return false;
   return new Date(e.expiresAt).getTime() < Date.now();
+}
+
+function mimeForAudio(uri: string): string {
+  const lower = uri.toLowerCase();
+  if (lower.endsWith('.webm')) return 'audio/webm';
+  if (lower.endsWith('.wav')) return 'audio/wav';
+  return 'audio/mp4';
 }
 
 /* ================================================================== */
@@ -140,10 +148,11 @@ export async function listVoiceDiaries(userId: string): Promise<VoiceDiaryEntry[
 /**
  * Create a voice diary entry.
  *
- * NOTE: The prototype records a simulated voice note (no microphone hardware is
- * used on web). Pass the local `voiceUri` from the recorder; when the backend is
- * live the URI would be a stored object (see `uploadBondMedia`), uploaded before
- * this insert.
+ * When the backend is live the local recording is uploaded into the private
+ * `bond-media` bucket (owner folder) and the registry row is linked to the
+ * diary so storage read authorization (message/moment/voice-diary rules) can
+ * gate access for connections. `voice_uri` stores the storage object path in
+ * that case; local URI is kept when upload fails or in preview mode.
  */
 export async function createVoiceDiary(
   userId: string,
@@ -152,15 +161,39 @@ export async function createVoiceDiary(
   if (!opts.voiceUri) return { ok: false, error: 'No voice note recorded' };
 
   if (isBackendConfigured && supabase) {
-    const { error } = await supabase.from('voice_diaries').insert({
-      user_id: userId,
-      audience: opts.audience,
-      space_id: opts.spaceId ?? null,
-      voice_uri: opts.voiceUri,
-      transcript: opts.transcript?.trim() ? opts.transcript.trim() : null,
-      expires_at: opts.expiresAt ?? null,
-    });
+    const { data: created, error } = await supabase
+      .from('voice_diaries')
+      .insert({
+        user_id: userId,
+        audience: opts.audience,
+        space_id: opts.spaceId ?? null,
+        voice_uri: opts.voiceUri,
+        transcript: opts.transcript?.trim() ? opts.transcript.trim() : null,
+        expires_at: opts.expiresAt ?? null,
+      })
+      .select('id')
+      .single();
     if (error) return { ok: false, error: error.message };
+    if (!created) return { ok: true };
+
+    // Upload the local recording and re-point the registry to the object.
+    const uploaded = await uploadBondMedia(userId, opts.voiceUri, mimeForAudio(opts.voiceUri));
+    if (uploaded.objectName) {
+      await supabase
+        .from('voice_diaries')
+        .update({ voice_uri: uploaded.objectName })
+        .eq('id', (created as { id: string }).id);
+      await supabase.from('media').upsert(
+        {
+          owner_id: userId,
+          bucket_id: 'bond-media',
+          object_name: uploaded.objectName,
+          voice_diary_id: (created as { id: string }).id,
+          mime_type: mimeForAudio(opts.voiceUri),
+        },
+        { onConflict: 'object_name' }
+      );
+    }
     return { ok: true };
   }
 

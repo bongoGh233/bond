@@ -162,10 +162,10 @@ export async function listIncomingBondLocks(userId: string): Promise<BondLockIte
  * Create a new Bond Lock protected message: a secret/note the sender locks,
  * granted to a single trusted connection.
  *
- * NOTE: For the prototype we record the grant directly against a synthesized
- * message. Real production would create the locked message inside a
- * conversation (see messages.ts) then hand out a signed capability token —
- * documented in docs/security.md.
+ * Server-enforced via the `create_bond_lock` SECURITY DEFINER RPC (migration
+ * 0006): the content is stored in `bond_lock_payloads` (no SELECT policy) and
+ * the lock message itself never contains it. The function validates
+ * conversation membership, an accepted connection, and the access mode.
  */
 export async function createBondLock(
   userId: string,
@@ -184,38 +184,20 @@ export async function createBondLock(
       ? new Date(Date.now() + durationHours * 3600_000).toISOString()
       : undefined;
 
-    // The message must live inside a direct conversation with the recipient
-    // (conversation_id is NOT NULL and message RLS is scoped to membership).
+    // The lock message must live inside a direct conversation with the
+    // recipient (verified again inside the RPC).
     const convo = await getOrCreateConversation(userId, recipientId);
     if ('error' in convo) return { ok: false, error: convo.error };
 
-    // Create the locked message inside that conversation.
-    const { data: message, error: mErr } = await client
-      .from('messages')
-      .insert({
-        conversation_id: convo.id,
-        sender_id: userId,
-        type: 'text',
-        content: trimmed,
-        status: 'sent',
-        bond_lock: true,
-      })
-      .select('id')
-      .single();
-    if (mErr || !message) return { ok: false, error: mErr?.message ?? 'Failed to lock message' };
-    const created = message as { id: string };
-
-    const { error: gErr } = await client.from('bond_lock_grants').insert({
-      message_id: created.id,
-      sender_id: userId,
-      grantee_id: recipientId,
-      access_mode: mode,
-      access_token: `BOND-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-      expires_at: expiresAt ?? null,
-      remain_uses: mode === 'one_time' ? 1 : mode === 'time_limited' ? 5 : null,
-      status: 'granted',
+    const { error } = await client.rpc('create_bond_lock', {
+      p_conversation_id: convo.id,
+      p_grantee_id: recipientId,
+      p_content: trimmed,
+      p_access_mode: mode,
+      p_expires_at: expiresAt ?? null,
+      p_remain_uses: mode === 'one_time' ? 1 : mode === 'time_limited' ? 5 : null,
     });
-    if (gErr) return { ok: false, error: gErr.message };
+    if (error) return { ok: false, error: error.message };
     return { ok: true };
   }
 
@@ -242,8 +224,9 @@ export async function createBondLock(
 }
 
 /**
- * Unlock an incoming bond. For 'one_time' this consumes the single use and
- * marks it as exhausted. Returns whether the unlock succeeded.
+ * Unlock an incoming bond through the `unlock_bond_grant` RPC. The server
+ * re-validates status/expiry, atomically decrements one_time uses, and returns
+ * the protected content — the only way it can ever be read.
  */
 export async function unlockBond(
   userId: string,
@@ -251,43 +234,10 @@ export async function unlockBond(
 ): Promise<{ ok: boolean; content?: string; error?: string }> {
   if (isBackendConfigured && supabase) {
     const client = supabase;
-    interface GrantUpdateRow {
-      id: string;
-      message_id: string;
-      status: BondStatus;
-      access_mode: BondAccessMode;
-      remain_uses: number | null;
-      sender_id: string;
-    }
-    const { data: grant, error: getErr } = await client
-      .from('bond_lock_grants')
-      .select('id, message_id, status, access_mode, remain_uses, sender_id')
-      .eq('id', grantId)
-      .eq('grantee_id', userId)
-      .single();
-    const g = grant as GrantUpdateRow | null;
-    if (getErr || !g) return { ok: false, error: getErr?.message ?? 'Grant not found' };
-    if (g.status !== 'granted') return { ok: false, error: 'This bond is no longer available' };
-
-    const nextUses = g.remain_uses == null ? null : Math.max(0, g.remain_uses - 1);
-    const status: BondStatus =
-      g.access_mode === 'one_time' || (nextUses !== null && nextUses <= 0)
-        ? 'expired'
-        : 'granted';
-
-    const { error: uErr } = await client
-      .from('bond_lock_grants')
-      .update({ status, remain_uses: nextUses })
-      .eq('id', grantId);
-    if (uErr) return { ok: false, error: uErr?.message ?? 'Failed to unlock' };
-
-    const { data: locked } = await client
-      .from('messages')
-      .select('content')
-      .eq('id', g.message_id)
-      .single();
-    const contentRow = locked as { content: string } | null;
-    return { ok: true, content: contentRow?.content ?? '' };
+    const { data, error } = await client.rpc('unlock_bond_grant', { p_grant_id: grantId });
+    if (error) return { ok: false, error: error.message };
+    const payload = data as { content?: string } | null;
+    return { ok: true, content: payload?.content ?? '' };
   }
 
   const item = previewLocks.find((i) => i.id === grantId);
@@ -303,16 +253,12 @@ export async function unlockBond(
 }
 
 /**
- * Revoke a bond the current user sent.
+ * Revoke a bond the current user sent (server-validated via `revoke_bond_lock`).
  */
 export async function revokeBond(userId: string, grantId: string): Promise<{ ok: boolean; error?: string }> {
   if (isBackendConfigured && supabase) {
     const client = supabase;
-    const { error } = await client
-      .from('bond_lock_grants')
-      .update({ status: 'revoked' })
-      .eq('id', grantId)
-      .eq('sender_id', userId);
+    const { error } = await client.rpc('revoke_bond_lock', { p_grant_id: grantId });
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   }

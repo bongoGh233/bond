@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth';
 import { Avatar } from '../components/Avatar';
+import { RecipientPicker, useRecipients } from '../components/RecipientPicker';
 import {
   createBondLock,
   listIncomingBondLocks,
@@ -18,21 +19,15 @@ const MODE_LABELS: Record<BondAccessMode, string> = {
   each_time: 'Ask each time',
 };
 
-const RECIPIENTS = [
-  { id: 'p-alice', name: 'Alice' },
-  { id: 'p-ben', name: 'Ben' },
-  { id: 'p-maya', name: 'Maya' },
-  { id: 'p-rosa', name: 'Rosa' },
-];
-
 export function BondLock() {
   const { session } = useAuth();
   const me = session?.userId ?? 'you';
+  const { options: recipientOptions } = useRecipients(me);
   const [incoming, setIncoming] = useState<BondLockItem[]>([]);
   const [mine, setMine] = useState<BondLockItem[]>([]);
   const [revealed, setRevealed] = useState<Record<string, string | undefined>>({});
 
-  const [recipient, setRecipient] = useState('p-ben');
+  const [recipient, setRecipient] = useState('');
   const [content, setContent] = useState('');
   const [mode, setMode] = useState<BondAccessMode>('one_time');
   const [hours, setHours] = useState(24);
@@ -49,6 +44,12 @@ export function BondLock() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (recipientOptions.length > 0 && !recipientOptions.some((o) => o.id === recipient)) {
+      setRecipient(recipientOptions[0].id);
+    }
+  }, [recipientOptions, recipient]);
 
   const make = async () => {
     setBusy(true);
@@ -93,17 +94,7 @@ export function BondLock() {
         <div className="card" style={{ padding: 16 }}>
           <div className="field">
             <label className="field-label">Locked for</label>
-            <div className="seg" role="group" aria-label="Recipient">
-              {RECIPIENTS.map((r) => (
-                <button
-                  key={r.id}
-                  className={'seg-btn' + (recipient === r.id ? ' active' : '')}
-                  onClick={() => setRecipient(r.id)}
-                >
-                  {r.name}
-                </button>
-              ))}
-            </div>
+            <RecipientPicker options={recipientOptions} value={recipient} onChange={setRecipient} />
           </div>
           <div className="field">
             <label className="field-label">Protected content</label>
@@ -135,7 +126,7 @@ export function BondLock() {
             ) : null}
           </div>
           {error ? <div className="field-error" style={{ marginBottom: 10 }}>{error}</div> : null}
-          <button className="btn btn-primary" disabled={busy || !content.trim()} onClick={make} style={{ width: '100%' }}>
+          <button className="btn btn-primary" disabled={busy || !recipient || !content.trim()} onClick={make} style={{ width: '100%' }}>
             {busy ? 'Locking…' : '🔒 Lock it'}
           </button>
         </div>

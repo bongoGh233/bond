@@ -196,3 +196,19 @@ export async function acknowledgeAlert(userId: string, alertId: string, action: 
   }
   return { ok: true };
 }
+
+export function subscribeToAlerts(userId: string, onChange: () => void): () => void {
+  if (!isBackendConfigured || !supabase) return () => {};
+  const client = supabase;
+  const channel = client
+    .channel(`i_need_you_${userId}`)
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'i_need_you' },
+      () => onChange()
+    )
+    .subscribe();
+  return () => {
+    client.removeChannel(channel);
+  };
+}

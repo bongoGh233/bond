@@ -50,7 +50,8 @@
           "color": "#0E0B16",
           "defaultChannel": "default"
         }
-      ]
+      ],
+      "expo-audio"
     ],
     "experiments": {
       "typedRoutes": true

@@ -1,8 +1,9 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useTheme } from '@/src/providers/theme-provider';
 import { useAuth } from '@/src/providers/auth-provider';
 import {
@@ -12,14 +13,13 @@ import {
   type VoiceAudience,
   type VoiceDiaryEntry,
 } from '@/src/api/voiceDiary';
+import { useVoiceRecorder } from '@/src/hooks/useVoiceRecorder';
 import { ScreenHeader } from '@/src/components/ui/ScreenHeader';
 import { SegmentedControl } from '@/src/components/ui/SegmentedControl';
 import { Avatar } from '@/src/components/ui/Avatar';
 import { Text } from '@/src/components/ui/Text';
 import { EmptyState } from '@/src/components/ui/EmptyState';
 import { BondButton } from '@/src/components/ui/Button';
-
-const RECORD_MS = 3000;
 
 const EXPIRY_PRESETS: { label: string; ms: number | null }[] = [
   { label: '24h', ms: 24 * 3600_000 },
@@ -59,14 +59,14 @@ export default function VoiceDiaryScreen() {
   const [transcript, setTranscript] = useState('');
   const [expiryMs, setExpiryMs] = useState<number | null>(24 * 3600_000);
   const [voiceUri, setVoiceUri] = useState<string>('');
-  const [recording, setRecording] = useState(false);
-  const [recordProgress, setRecordProgress] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  const recordTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const playingId = useRef<string | null>(null);
-  const [playing, setPlaying] = useState<string | null>(null);
-  const playTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recorder = useVoiceRecorder();
+
+  const [playingId, setPlayingId] = useState<string | null>(null);
+  const [playingUri, setPlayingUri] = useState<string | null>(null);
+  const player = useAudioPlayer(playingUri ?? null);
+  const playback = useAudioPlayerStatus(player);
 
   const load = useCallback(async () => {
     const list = await listVoiceDiaries(me);
@@ -81,34 +81,22 @@ export default function VoiceDiaryScreen() {
     })();
   }, [load]);
 
+  // Stop the "playing" state naturally when the audio finishes.
   useEffect(() => {
-    return () => {
-      if (recordTimer.current) clearInterval(recordTimer.current);
-      if (playTimer.current) clearInterval(playTimer.current);
-    };
-  }, []);
+    if (playback.didJustFinish || playback.error) {
+      setPlayingId(null);
+      setPlayingUri(null);
+    }
+  }, [playback.didJustFinish, playback.error]);
 
-  const startRecord = () => {
-    if (recording) return;
-    setRecording(true);
-    setRecordProgress(0);
-    const started = Date.now();
-    recordTimer.current = setInterval(() => {
-      const pct = Math.min(100, ((Date.now() - started) / RECORD_MS) * 100);
-      setRecordProgress(pct);
-      if (pct >= 100) {
-        if (recordTimer.current) clearInterval(recordTimer.current);
-        setRecording(false);
-        setVoiceUri(`bond://preview-voice-${Date.now()}`);
-      }
-    }, 60);
+  const startRecord = async () => {
+    if (recorder.isRecording) return;
+    await recorder.start();
   };
 
-  const cancelRecord = () => {
-    if (recordTimer.current) clearInterval(recordTimer.current);
-    setRecording(false);
-    setRecordProgress(0);
-    setVoiceUri('');
+  const stopRecord = async () => {
+    await recorder.stop();
+    if (recorder.uri) setVoiceUri(recorder.uri);
   };
 
   const save = async () => {
@@ -122,6 +110,7 @@ export default function VoiceDiaryScreen() {
     });
     setSaving(false);
     if (res.ok) {
+      recorder.clearRecording();
       setVoiceUri('');
       setTranscript('');
       setAudience('private');
@@ -129,20 +118,17 @@ export default function VoiceDiaryScreen() {
     }
   };
 
-  const play = (id: string) => {
-    if (playing === id) {
-      if (playTimer.current) clearInterval(playTimer.current);
-      setPlaying(null);
-      playingId.current = null;
+  const togglePlay = (entry: VoiceDiaryEntry) => {
+    if (playingId === entry.id) {
+      player.pause();
+      setPlayingId(null);
+      setPlayingUri(null);
       return;
     }
-    if (playTimer.current) clearInterval(playTimer.current);
-    setPlaying(id);
-    playingId.current = id;
-    playTimer.current = setTimeout(() => {
-      setPlaying(null);
-      playingId.current = null;
-    }, 3200);
+    setPlayingId(entry.id);
+    setPlayingUri(entry.voiceUri);
+    player.seekTo(0).catch(() => {});
+    player.play();
   };
 
   const remove = async (entry: VoiceDiaryEntry) => {
@@ -222,11 +208,11 @@ export default function VoiceDiaryScreen() {
                 justifyContent: 'center',
               }}
             >
-              {recording ? (
+              {recorder.isRecording ? (
                 <View style={{ alignItems: 'center' }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: theme.spacing.sm }}>
                     <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: theme.colors.danger }} />
-                    <Text variant="label" color="danger" weight="semibold">Recording… {Math.round((recordProgress / 100) * 3)}s</Text>
+                    <Text variant="label" color="danger" weight="semibold">Recording… {Math.max(1, Math.round(recorder.durationMs / 1000))}s</Text>
                   </View>
                   <View
                     style={{
@@ -238,7 +224,7 @@ export default function VoiceDiaryScreen() {
                       overflow: 'hidden',
                     }}
                   >
-                    <View style={{ width: `${recordProgress}%`, height: 6, backgroundColor: theme.colors.primary }} />
+                    <View style={{ width: '100%', height: 6, backgroundColor: theme.colors.danger }} />
                   </View>
                 </View>
               ) : voiceUri ? (
@@ -246,23 +232,26 @@ export default function VoiceDiaryScreen() {
                   <MaterialIcons name="check-circle" size={22} color={theme.colors.success} />
                   <Text variant="label" color="success" weight="semibold" style={{ marginLeft: theme.spacing.sm }}>
                     Voice note ready — tap to re-record
+                    {recorder.durationMs > 0 ? ` (${Math.max(1, Math.round(recorder.durationMs / 1000))}s)` : ''}
                   </Text>
                 </View>
               ) : (
-                <Text variant="caption" color="muted">Prototype records a simulated note (no microphone on web)</Text>
+                <Text variant="caption" color="muted">
+                  {recorder.error ?? 'Tap Record and speak — this uses your real microphone.'}
+                </Text>
               )}
 
               <View style={{ flexDirection: 'row', gap: theme.spacing.sm, marginTop: theme.spacing.sm }}>
-                {recording ? (
-                  <Pressable onPress={cancelRecord} style={{ paddingHorizontal: theme.spacing.sm, paddingVertical: theme.spacing.xxs, borderRadius: theme.radius.pill, backgroundColor: theme.colors.danger }}>
+                {recorder.isRecording ? (
+                  <Pressable onPress={() => void stopRecord()} style={{ paddingHorizontal: theme.spacing.sm, paddingVertical: theme.spacing.xxs, borderRadius: theme.radius.pill, backgroundColor: theme.colors.danger }}>
                     <Text variant="micro" color="onPrimary" weight="semibold">Stop</Text>
                   </Pressable>
                 ) : voiceUri ? (
-                  <Pressable onPress={startRecord} style={{ paddingHorizontal: theme.spacing.sm, paddingVertical: theme.spacing.xxs, borderRadius: theme.radius.pill, backgroundColor: theme.colors.primarySoft }}>
+                  <Pressable onPress={() => void startRecord()} style={{ paddingHorizontal: theme.spacing.sm, paddingVertical: theme.spacing.xxs, borderRadius: theme.radius.pill, backgroundColor: theme.colors.primarySoft }}>
                     <Text variant="micro" color="primary" weight="semibold">Re-record</Text>
                   </Pressable>
                 ) : (
-                  <Pressable onPress={startRecord} style={{ paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.xxs, borderRadius: theme.radius.pill, backgroundColor: theme.colors.primary }}>
+                  <Pressable onPress={() => void startRecord()} style={{ paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.xxs, borderRadius: theme.radius.pill, backgroundColor: theme.colors.primary }}>
                     <Text variant="micro" color="onPrimary" weight="semibold">● Record</Text>
                   </Pressable>
                 )}
@@ -328,7 +317,7 @@ export default function VoiceDiaryScreen() {
             <Text variant="body" color="muted" style={{ marginBottom: theme.spacing.lg }}>No entries yet — record one above.</Text>
           ) : (
             mine.map((e) => {
-              const isPlaying = playing === e.id;
+              const isPlaying = playingId === e.id;
               return (
                 <View
                   key={e.id}
@@ -343,7 +332,7 @@ export default function VoiceDiaryScreen() {
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                     <Pressable
-                      onPress={() => play(e.id)}
+                      onPress={() => togglePlay(e)}
                       hitSlop={8}
                       accessibilityLabel="Play"
                       style={{
@@ -399,11 +388,11 @@ export default function VoiceDiaryScreen() {
             />
           ) : (
             fromOthers.map((e) => {
-              const isPlaying = playing === e.id;
+              const isPlaying = playingId === e.id;
               return (
                 <Pressable
                   key={e.id}
-                  onPress={() => play(e.id)}
+                  onPress={() => togglePlay(e)}
                   style={({ pressed }) => ({
                     backgroundColor: theme.colors.surface,
                     borderRadius: theme.radius.xl,
@@ -428,7 +417,7 @@ export default function VoiceDiaryScreen() {
           )}
 
           <Text variant="micro" color="muted" style={{ marginTop: theme.spacing.md }}>
-            Voice Diary is a prototype: recording is simulated on web. On device this would use expo-audio for real mic capture and upload the file via Bond storage.
+            Voice notes use your real microphone via expo-audio. When the backend is connected they upload to Bond storage; here they stay on this device.
           </Text>
         </ScrollView>
       )}

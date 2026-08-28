@@ -100,12 +100,20 @@ npm run dev
 ### 5. Configure the backend (Supabase)
 
 1. Create a free project at [supabase.com](https://supabase.com).
-2. Apply the SQL migrations in `apps/backend/supabase/migrations/` (in order) via
-   **SQL Editor** or the CLI. They create all tables, enable **RLS**, add the
-   signup trigger, storage bucket, and realtime publication.
+2. Apply the SQL migrations in `apps/backend/supabase/migrations/` (0001 → 0007, in
+   order) via **SQL Editor** or the CLI. They create all tables, enable **RLS**, add
+   the signup trigger, storage bucket, realtime publication, the Bond Lock RPCs,
+   and the push outbox pipeline.
 3. (Optional) Run `apps/backend/supabase/seed/0001_demo_users.sql` to create two demo
    accounts: `alice@bond.app` / `bonddemo123` and `ben@bond.app` / `bonddemo123`.
 4. Copy the project URL and anon key from **Settings → API**.
+
+**Push notifications (optional):**
+- Deploy the Edge Function: `supabase functions deploy process-push-outbox` and
+  schedule it (e.g. every minute) via `supabase functions schedule`.
+- Set secrets: `supabase secrets set SUPABASE_SERVICE_ROLE_KEY=...` (and
+  `EXPO_ACCESS_TOKEN=...` if you have an Expo project, which disables legacy push
+  API). See `apps/backend/.env.example`.
 
 ### Configure environment variables
 
@@ -146,14 +154,15 @@ real secrets, and never put the Supabase `service_role` key in a client app.**
 | Avatars (generated)        | ✅ Privacy-friendly, no paid service                          |
 | Private messaging UI       | ✅ Text + photo chat, receipts, realtime subscribe            |
 | Connections                | ✅ Search, request, accept/decline, remove                    |
-| **I Need You**             | ✅ Opt-in, urgent alerts, acknowledge flow                    |
-| **Bond Lock**              | ✅ Prototype: one-time / timed / repeat grants, revoke        |
+| **I Need You**             | ✅ Opt-in, urgent alerts, realtime, acknowledge flow          |
+| **Bond Lock**              | ✅ Server-enforced: one-time / timed / repeat grants, revoke  |
 | **Moments**                | ✅ Text/photo, durations, viewers, expiry                     |
 | Shared Space / Memories    | ✅ Spaces, memories, bucket list                              |
 | Surprise Box               | ✅ Scheduled future messages, open/delete                     |
-| Media upload (storage)     | ✅ Real upload to `bond-media` bucket when backend is live    |
-| Notifications center       | ✅ In-app notification list + mark read                       |
-| Voice Diary                | ✅ Voice notes to self / connections / spaces (simulated on web) |
+| Media upload (storage)     | ✅ Real upload to `bond-media` bucket, server-verified reads  |
+| Notifications center       | ✅ In-app list + mark read + Realtime                         |
+| Push notifications         | ✅ Backend pipeline (outbox + Edge Function → Expo)          |
+| Voice Diary                | ✅ Real recording + playback (mobile + web)                   |
 
 Each item marked as a work-in-progress (`WIP`) is clearly labelled in the UI with a
 "coming in Phase X" tag rather than being faked.
@@ -210,18 +219,21 @@ apps/
 ## 🗺️ Roadmap
 
 - **Phase 3–4:** Connections + real-time messaging. ✅ Done
-- **Phase 5:** I Need You, Bond Lock prototype, Moments, Shared Space / Memories /
+- **Phase 5:** I Need You, Bond Lock, Moments, Shared Space / Memories /
   Bucket list, Surprise Box. ✅ Done
 - **Phase 6:** Media upload to private storage, in-app notifications center. ✅ Done
-- **Phase 7:** Voice Diary (prototype, simulated mic on web). ✅ Done
+- **Phase 7:** Voice Diary (real recording + playback on mobile and web). ✅ Done
 - **Web companion parity:** Chats, Connections, Moments, Shared Space, Bond Lock,
   Surprise Box, I Need You, Voice Diary + notifications — matching the mobile app,
   with the same preview-mode demo data. ✅ Done
-- **Push notifications (scaffold):** `expo-notifications` + `expo-device` wired on
-  mobile — foreground handler, permission + device registration into `user_devices`
-  (`token` column), tap-to-chat deep link. ✅ Client layer
-- **Next:** Push delivery backend — APNs/FCM credentials, Expo push service, and
-  a server that fans notifications out to recipient tokens; settings toggle.
+- **Bond Lock hardening:** server-enforced capability model (`bond_lock_payloads`
+  with no SELECT policy; `create_bond_lock` / `unlock_bond_grant` /
+  `revoke_bond_lock` RPCs). ✅ Done
+- **Push notifications:** server-side pipeline — `push_outbox` + enqueue trigger
+  (quiet hours, opt-out, I Need You bypass) and the `process-push-outbox` Edge
+  Function delivering via Expo push. ✅ Done
+- **Next:** apply migrations to a live Supabase project, deploy the Edge Function
+  schedule, and register Expo credentials.
 - **Phase 8:** Polish, edge-case handling, security review.
 - **Phase 9 (long-term):** Audited end-to-end encryption.
 
@@ -230,10 +242,11 @@ apps/
 ## 🧪 Known limitations
 
 - End-to-end encryption not yet implemented (documented above).
-- Storage/media access control is prototype-grade; signed-URL enforcement is a
-  production requirement.
-- Bond Lock is a demonstration flow, not cryptographic access control yet.
+- Bond Lock protection is server-enforced authorization, not cryptography —
+  payloads remain readable by operator infrastructure until E2EE lands.
 - Realtime/push at scale requires a paid backend tier.
+- Push delivery is best-effort; Expo credentials (APNs/FCM) must be configured in
+  the hosted project and the Edge Function scheduled.
 
 ---
 

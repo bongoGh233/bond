@@ -64,21 +64,27 @@ Until then:
 
 ---
 
-## 3. Bond Lock — prototype mechanics
+## 3. Bond Lock — server-enforced capability model
 
-Bond Lock is currently a **demonstration flow**, not a cryptographic access
-control system.
+Bond Lock is **server-enforced authorization**, not cryptography.
 
-- Protected media is flagged on the message row (`bond_lock = true`).
-- Access is granted via a `bond_lock_grants` row (one-time / time-limited /
-  each-time) that the **recipient's client checks** before revealing the content.
-- Optional short access tokens are demonstrated for the UI flow.
+- The real content lives in `bond_lock_payloads`, which has **no SELECT policy** —
+  not even conversation members can read it through normal SQL/RLS.
+- `create_bond_lock()` (SECURITY DEFINER) atomically creates the marker message,
+  the hidden payload, and a `bond_lock_grants` row with a server-generated token.
+- `unlock_bond_grant()` is the **only** path that returns content. It re-validates
+  the grantee, status, expiry (`time_limited`) and remaining uses (`one_time`),
+  decrements one-time uses atomically, and auto-marks expired grants.
+- `revoke_bond_lock()` lets the sender revoke at any time; revoked or denied
+  grants can never unlock.
 
-**Production would replace this** with server-enforced, cryptographically signed
-capabilities (e.g. short-lived signed URLs that the sender's server issues only
-after an approved grant, plus content encryption). A 4-digit PIN is **not** the
-security boundary; it is only a UX convenience and is not relied upon as the sole
-protection.
+Honest limits:
+- There is **no homemade encryption**. `bond_lock_payloads.content` is stored on
+  the server and remains readable by operator infrastructure, like every other
+  row in the prototype. Protection is unguessable storage plus server-side
+  authorization checks enforced in SQL.
+- Media Bond Locks (photos/videos behind a lock) would extend the same model with
+  object keys in `media_metadata`; that is a future enhancement.
 
 ---
 
@@ -120,16 +126,39 @@ Photos in messages and Moments are uploaded to the private `bond-media` bucket
   reads of the object are only allowed through the registry when the user is the
   owner *or* a member of the message's conversation.
 - The **app requests a short-lived signed URL** to render each file.
-- **Prototype gap:** signed-URL creation is initiated by the client after the client
-  checks membership. Production should create signed URLs behind a server function
-  that re-checks conversation/space membership server-side (the data needed to do
-  that is already in `media`).
+- **Enforcement:** the storage read policy is backed by `storage_can_read_object()`
+  (migration 0005), a server-side helper that re-checks ownership or conversation /
+  space / moment-member access inside SQL. A user cannot obtain a signed URL for
+  media they aren't authorized to read — enforcement no longer trusts the client.
 - In **preview mode** (no backend env), uploads no-op and the local `file://` URI is
   used so images still render in the demo.
 
 ---
 
-## 7. Preview mode (no backend)
+## 7. Notifications & push delivery
+
+All notifications — messages, connection events, Moment views, Surprise Box, Bond
+Lock and I Need You — are written server-side into `notifications` by the trigger
+functions in migration 0005 and surfaced to clients over **Realtime**.
+
+Background push is a separate private pipeline:
+
+- `notifications` triggers enqueue rows into `push_outbox` (migration 0007). The
+  table has RLS enabled with **zero policies** — no client can read or write it.
+- A `SECURITY DEFINER` trigger only enqueues when the user has a device token in
+  `user_devices`, respects the user's `push_notifications` opt-out, and honors
+  `quiet_hours` — except for **I Need You**, which intentionally bypasses quiet
+  hours because it is urgent.
+- The `process-push-outbox` Edge Function (service role only) flushes due rows to
+  the **Expo push service**, which delivers to APNs/FCM. Device tokens are only
+  ever read server-side and are never exposed to other clients.
+- Delivery is best-effort and retried with exponential backoff; permanently dead
+  tokens are cleared from `user_devices`. Offline users receive pushes at next
+  reconnect; nothing is claimed to be instant.
+
+---
+
+## 8. Preview mode (no backend)
 
 When `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` are not set, the
 app runs entirely on **in-memory demo data** (`src/api/*` preview branches). This
@@ -139,7 +168,7 @@ real Supabase rows. Nothing in preview mode fakes security claims.
 
 ---
 
-## 8. Operational hardliners (both prototype and production)
+## 9. Operational hardliners (both prototype and production)
 - Secret keys live in `.env` (git-ignored), with `.env.example` committed for
   reference. **Never** commit real secrets.
 - The `service_role` key must never appear in a client bundle.

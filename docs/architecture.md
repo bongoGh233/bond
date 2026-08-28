@@ -12,10 +12,10 @@ reasoning behind each choice.
 
 | App | Stack | Purpose |
 | --- | --- | --- |
-| `mobile/` | Expo (React Native + TypeScript + Expo Router) | Primary experience: chat, Moments, shared space, unique features |
-| `web/` | Vite + React + TypeScript | Feature-matched companion for desktop: chat, Connections, Moments, Shared Space, Bond Lock, Surprise Box, I Need You, Voice Diary, notifications, settings |
-| `website/` | Static marketing site | Public info, features, privacy, FAQ, support |
-| `supabase/` | Postgres + Supabase Auth + Realtime + Storage | Backend services |
+| `apps/mobile` | Expo (React Native + TypeScript + Expo Router) | Primary experience: chat, Moments, shared space, unique features |
+| `apps/web` | Vite + React + TypeScript | Feature-matched companion for desktop: chat, Connections, Moments, Shared Space, Bond Lock, Surprise Box, I Need You, Voice Diary, notifications, settings |
+| `apps/site` | Static marketing site | Public info, features, privacy, FAQ, support |
+| `apps/backend` | Supabase (Postgres + Auth + Realtime + Storage + Edge Functions) | Backend services |
 
 ## Why this stack?
 
@@ -52,16 +52,19 @@ Edge Function layer if needed.
 See `supabase/migrations/*.sql` for the authoritative schema. Core concepts:
 
 - `profiles` — display name, Bond ID (`@handle`, unique), avatar, bio, privacy defaults
+- `user_settings` — JSONB preferences (`push_notifications`, `quiet_hours`, …) owned by the user
 - `connections` — accepted/requested/pending trust links between two users
 - `conversations` + `conversation_members` — one conversation per connection pair
-- `messages` — text, media pointers, reply-to, reactions, delivery/read state, bond-lock flag
-- `media` — registry for uploaded files (photos, video, voice, documents) in the private `bond-media` bucket
-- `bond_lock_grants` — the "Bond Lock" access-grant system (message_id, grantee, mode, uses)
+- `messages` — text, media pointers, reply-to, reactions, delivery/read state, Bond Lock marker
+- `media` — registry for uploaded files (photos, voice, documents) in the private `bond-media` bucket
+- `bond_lock_payloads` + `bond_lock_grants` — server-enforced "Bond Lock": hidden payloads (no SELECT policy) unlocked only via `unlock_bond_grant()`
+- `user_devices` — push-capable devices per user (Expo tokens, revocable)
+- `push_outbox` — private delivery queue for background push (zero RLS policies; Edge Function only)
 - `moments` + `moment_views` — temporary updates with viewer scope + expiry
 - `i_need_you` + `i_need_you_prefs` — the "I Need You" alert feature (opt-in, quiet hours)
 - `shared_spaces`, `shared_space_members`, `memories`, `bucket_list_items` — shared connection-space features
 - `surprise_boxes` — scheduled future messages revealed on a chosen date
-- `notifications` — user-notification queue (in-app)
+- `notifications` — user-notification queue (in-app + push trigger)
 
 ## Security model
 
@@ -78,32 +81,35 @@ alone) plus Supabase Auth sessions.
 
 ## Realtime architecture
 
-- Messages: app subscribes to `postgres_changes` on the conversations it belongs
-  to and inserts rows through the same channel.
+- Messages and "I Need You" alerts: the app subscribes to `postgres_changes` on the
+  tables it participates in (realtime publication + RLS) and writes through the same
+  channel. Both the mobile and web apps live-update while connected.
 - Connected peers see updates almost instantly while both have connectivity.
-- **Honest limitation**: if a device is fully offline, a realtime alert cannot
-  arrive. Pending payloads are queued and delivered on reconnect where the backend
-  supports it (notification rows are persisted and fetched on next session).
+- In-app `notifications` rows (written by `SECURITY DEFINER` triggers) also arrive
+  over Realtime, so the notification center refreshes without polling.
+- **Honest limitation**: if a device is fully offline, a realtime event cannot
+  arrive. Background push (below) covers closed/offline apps as best-effort.
 
-## Push notifications (client scaffolded, delivery requires paid/capable infra)
+## Push notifications
 
-The mobile client already has the push layer scaffolded: `expo-notifications` +
-`expo-device` are installed, the `expo-notifications` plugin is in `app.json`,
-`app/_layout.tsx` mounts a `NotificationProvider` that configures the foreground
-handler, requests permission, registers the device with `user_devices` (populating
-the reserved `token` column with an Expo push token) and deep-links to a chat when
-a notification is tapped. `src/api/pushNotifications.ts` owns token registration,
-listing and revoking devices (native-only; preview mode is a no-op).
+The delivery pipeline is now server-side, built entirely in SQL + one Edge Function:
 
-What is **not** done yet — all backend/server requirements:
-- **APNs (Apple) + FCM (Google)** credentials, Expo push service, and a real server
-  that fans out notifications to recipient push tokens on new messages.
-- A settings toggle / preference to opt in or out of push (currently registers on
-  sign-in; permission prompt gates it).
-- Delivery reliability, retry/queueing, and badge handling for closed apps.
-
-Until these are in place the prototype uses in-app notifications and realtime
-alerts instead — reliable only while the app is open.
+- `SECURITY DEFINER` triggers on `notifications` enqueue a delivery row into
+  `push_outbox` — only when the user has a device token, respecting the
+  `push_notifications` opt-out and `quiet_hours` (I Need You bypasses quiet hours).
+- `push_outbox` has RLS enabled with zero policies, so it is only reachable by the
+  service role.
+- `apps/backend/supabase/functions/process-push-outbox/` (Deno + supabase-js) is
+  triggered on a schedule: it claims due rows, resolves tokens from `user_devices`,
+  sends them in chunks of 100 to the **Expo push service** (APNs/FCM delivery),
+  applies exponential backoff on temporary failures, marks permanent errors
+  (DeviceNotRegistered, MessageTooBig, InvalidCredentials) as failed, and clears
+  dead tokens.
+- Clients register their Expo token into `user_devices` via
+  `src/api/pushNotifications.ts` (mobile only; web has no push). Tapping a push
+  deep-links into the app (`/chat/[id]` or `/i-need-you`).
+- Secrets are supplied to the Edge Function with `supabase secrets set`
+  (`SUPABASE_SERVICE_ROLE_KEY`, optional `EXPO_ACCESS_TOKEN`).
 
 ## Monorepo layout
 
@@ -113,18 +119,19 @@ once, in `supabase/migrations/`.
 
 ```
 BOND/
-├── mobile/
-│   ├── app/          # Expo Router screens
-│   ├── src/
-│   │   ├── theme/    # design tokens + themes
-│   │   ├── components/
-│   │   ├── lib/      # supabase client, api helpers
-│   │   ├── features/ # conversations, connections, moments, ...
-│   │   └── state/    # auth context, settings
-│   └── app.json
-├── supabase/
-│   └── migrations/   # SQL: tables + RLS + triggers
-├── web/
-├── website/
+├── apps/
+│   ├── mobile/       # Expo Router screens (auth, tabs, detail)
+│   │   ├── app/
+│   │   └── src/      # theme, components, providers, api
+│   ├── web/
+│   ├── site/
+│   └── backend/
+│       ├── supabase/
+│       │   ├── migrations/   # SQL: tables + RLS + triggers + functions
+│       │   ├── functions/    # Deno Edge Functions (push delivery)
+│       │   ├── seed/         # demo users
+│       │   └── config.toml
+│       ├── docs/             # security model
+│       └── .env.example
 └── docs/
 ```

@@ -11,9 +11,11 @@ import {
   updateINeedYouPrefs,
   sendINeedYouAlert,
   acknowledgeAlert,
+  subscribeToAlerts,
   type INeedYouAlert,
   type AckAction,
 } from '@/src/api/iNeedYou';
+import { isBackendConfigured } from '@/src/api/supabase';
 import { listConnections, type ConnectionUser } from '@/src/api/connections';
 import { ScreenHeader } from '@/src/components/ui/ScreenHeader';
 import { Avatar } from '@/src/components/ui/Avatar';
@@ -69,6 +71,13 @@ export default function INeedYouScreen() {
       setLoading(false);
     })();
   }, [load]);
+
+  useEffect(() => {
+    if (!isBackendConfigured) return;
+    return subscribeToAlerts(me, () => {
+      void load();
+    });
+  }, [me, load]);
 
   const toggleOptIn = async (value: boolean) => {
     setOptIn(value);

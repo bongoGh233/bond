@@ -22,8 +22,6 @@ const EXPIRE_PRESETS = [
   { label: 'Keep', ms: 0 },
 ];
 
-const RECORD_MS = 3000;
-
 function AudienceBadge({ a }: { a: VoiceAudience }) {
   const label = AUDIENCES.find((x) => x.key === a)?.label ?? a;
   return <span className="pill pill-primary" style={{ marginLeft: 8 }}>{label}</span>;
@@ -33,17 +31,21 @@ export function VoiceDiary() {
   const { session } = useAuth();
   const me = session?.userId ?? 'you';
   const [entries, setEntries] = useState<VoiceDiaryEntry[]>([]);
-  const [playing, setPlaying] = useState<string | null>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
 
   const [audience, setAudience] = useState<VoiceAudience>('connections');
   const [expire, setExpire] = useState<number>(EXPIRE_PRESETS[0].ms);
   const [transcript, setTranscript] = useState('');
   const [recording, setRecording] = useState(false);
-  const [progress, setProgress] = useState(0);
+  const [recordSeconds, setRecordSeconds] = useState(0);
   const [recordedUri, setRecordedUri] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const timer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const elapsedTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const load = useCallback(async () => {
     setEntries(await listVoiceDiaries(me));
@@ -55,24 +57,59 @@ export function VoiceDiary() {
 
   useEffect(() => {
     return () => {
-      if (timer.current) clearInterval(timer.current);
+      if (elapsedTimer.current) clearInterval(elapsedTimer.current);
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      audioRef.current?.pause();
     };
   }, []);
 
-  const startRecording = () => {
+  const startRecording = async () => {
     setRecordedUri(null);
-    setProgress(0);
-    setRecording(true);
-    const start = Date.now();
-    timer.current = setInterval(() => {
-      const p = Math.min(100, ((Date.now() - start) / RECORD_MS) * 100);
-      setProgress(p);
-      if (p >= 100) {
-        if (timer.current) clearInterval(timer.current);
+    setError(null);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+      chunksRef.current = [];
+      const rec = new MediaRecorder(stream);
+      recorderRef.current = rec;
+      rec.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+      rec.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: rec.mimeType || 'audio/webm' });
+        setRecordedUri(URL.createObjectURL(blob));
+        stream.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
         setRecording(false);
-        setRecordedUri(`bond://simulated-voice-${Date.now()}`);
-      }
-    }, 100);
+      };
+      rec.start();
+      setRecording(true);
+      setRecordSeconds(0);
+      elapsedTimer.current = setInterval(() => setRecordSeconds((s) => s + 1), 1000);
+    } catch {
+      setError('Microphone access was denied or is unavailable in this browser.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (elapsedTimer.current) clearInterval(elapsedTimer.current);
+    elapsedTimer.current = null;
+    if (recorderRef.current && recorderRef.current.state === 'recording') recorderRef.current.stop();
+  };
+
+  const togglePlay = (e: VoiceDiaryEntry) => {
+    if (playingId === e.id) {
+      audioRef.current?.pause();
+      setPlayingId(null);
+      return;
+    }
+    audioRef.current?.pause();
+    const audio = new Audio(e.voiceUri);
+    audio.onended = () => setPlayingId(null);
+    audio.onerror = () => setPlayingId(null);
+    audioRef.current = audio;
+    void audio.play().catch(() => setPlayingId(null));
+    setPlayingId(e.id);
   };
 
   const save = async () => {
@@ -90,6 +127,7 @@ export function VoiceDiary() {
       setError(r.error ?? 'Failed to save');
       return;
     }
+    if (recordedUri.startsWith('blob:')) URL.revokeObjectURL(recordedUri);
     setRecordedUri(null);
     setTranscript('');
     await load();
@@ -104,7 +142,7 @@ export function VoiceDiary() {
     <div className="content" style={{ maxWidth: 720 }}>
       <div style={{ marginBottom: 24 }}>
         <h1 style={{ fontSize: '1.2rem', fontWeight: 700 }}>Voice diary</h1>
-        <p className="muted" style={{ fontSize: '.85rem' }}>Notes in your own voice — private, or shared with those closest to you. (Prototype: simulated recorder, no microphone on web.)</p>
+        <p className="muted" style={{ fontSize: '.85rem' }}>Notes in your own voice — private, or shared with those closest to you. Uses your microphone via the browser.</p>
       </div>
 
       <div className="settings-section">
@@ -115,16 +153,14 @@ export function VoiceDiary() {
               {recording ? '◉' : '🎙️'}
             </div>
             {recording ? (
-              <div className="progress" style={{ maxWidth: 320, margin: '0 auto' }}>
-                <div className="progress-fill" style={{ width: `${progress}%` }} />
-              </div>
+              <button className="btn btn-danger" onClick={stopRecording}>Stop recording</button>
             ) : recordedUri ? (
               <span className="pill pill-gold">✓ Recorded — review, then save</span>
             ) : (
               <button className="btn btn-primary" onClick={startRecording}>Start recording</button>
             )}
             <p className="muted" style={{ fontSize: '.78rem', marginTop: 8 }}>
-              {recording ? 'Listening…' : recordedUri ? 'Simulated note ready' : '3-second demo note'}
+              {recording ? `Listening… ${recordSeconds}s` : recordedUri ? 'Note ready (your microphone was used)' : 'Tap to record with your microphone'}
             </p>
           </div>
 
@@ -198,9 +234,9 @@ export function VoiceDiary() {
                 <button
                   className="btn btn-secondary"
                   style={{ padding: '8px 14px', width: 'auto', alignSelf: 'center' }}
-                  onClick={() => { setPlaying(e.id); setTimeout(() => setPlaying(null), 1600); }}
+                  onClick={() => togglePlay(e)}
                 >
-                  {playing === e.id ? '▶ Playing…' : '▶ Play'}
+                  {playingId === e.id ? '⏸ Pause' : '▶ Play'}
                 </button>
                 {e.mine ? (
                   <button className="btn btn-danger" style={{ padding: '8px 14px', width: 'auto', alignSelf: 'center' }} onClick={() => remove(e)}>

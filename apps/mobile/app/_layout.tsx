@@ -26,10 +26,15 @@ function NotificationProvider() {
     const subscription = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = (response.notification.request.content.data ?? {}) as {
         chatId?: string;
+        conversation_id?: string;
+        alert_id?: string;
         screen?: string;
       };
-      if (data.chatId) {
-        router.push({ pathname: '/chat/[id]', params: { id: data.chatId } } as Href);
+      const chatId = data.chatId ?? data.conversation_id;
+      if (chatId) {
+        router.push({ pathname: '/chat/[id]', params: { id: chatId } } as Href);
+      } else if (data.alert_id) {
+        router.push('/i-need-you');
       } else if (data.screen) {
         router.push(data.screen as Href);
       }

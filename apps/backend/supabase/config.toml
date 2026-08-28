@@ -1,0 +1,25 @@
+# Supabase project configuration for the Bond backend.
+# Auto-generated references. `supabase start` / `supabase db reset` use this to
+# apply migrations/seed locally; `supabase functions deploy` deploys Edge Functions.
+
+project_id = "bond"
+
+[db]
+major_version = 15
+
+[db.seed]
+enabled = true
+sql_paths = ["./seed"]
+
+[db.migrations]
+# Supabase infers directory name automatically from the migrations present.
+
+[functions.process-push-outbox]
+verify_jwt = false
+import_map = null
+
+[auth]
+enabled = true
+
+[storage]
+enabled = true

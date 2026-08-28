@@ -1,24 +1,19 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../auth';
 import { Avatar } from '../components/Avatar';
+import { RecipientPicker, useRecipients } from '../components/RecipientPicker';
 import {
   acknowledgeAlert,
   getINeedYouPrefs,
   listINeedYouAlerts,
-  previewRecipientName,
   sendINeedYouAlert,
+  subscribeToAlerts,
   updateINeedYouPrefs,
   type AckAction,
   type INeedYouAlert,
   type INeedYouPrefs,
 } from '../api/iNeedYou';
 import { timeAgo } from '../utils';
-
-const RECIPIENTS = [
-  { id: 'p-ben', name: 'Ben' },
-  { id: 'p-maya', name: 'Maya' },
-  { id: 'p-rosa', name: 'Rosa' },
-];
 
 const ACK_LABELS: Record<AckAction, string> = {
   im_here: 'I’m here',
@@ -58,10 +53,11 @@ function AlertCard({ a, onAck }: { a: INeedYouAlert; onAck: (action: AckAction) 
 export function INeedYou() {
   const { session } = useAuth();
   const me = session?.userId ?? 'you';
+  const { options: recipientOptions } = useRecipients(me);
   const [alerts, setAlerts] = useState<INeedYouAlert[]>([]);
   const [prefs, setPrefs] = useState<INeedYouPrefs>({ optIn: false, quietHours: { enabled: false } });
 
-  const [recipient, setRecipient] = useState('p-ben');
+  const [recipient, setRecipient] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -75,6 +71,18 @@ export function INeedYou() {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (recipientOptions.length > 0 && !recipientOptions.some((o) => o.id === recipient)) {
+      setRecipient(recipientOptions[0].id);
+    }
+  }, [recipientOptions, recipient]);
+
+  useEffect(() => {
+    return subscribeToAlerts(me, () => {
+      void load();
+    });
+  }, [me, load]);
 
   const toggleOptIn = async (opted: boolean) => {
     const next = { ...prefs, optIn: opted };
@@ -123,13 +131,7 @@ export function INeedYou() {
         <div className="card" style={{ padding: 16 }}>
           <div className="field">
             <label className="field-label">Alert</label>
-            <div className="seg" role="group" aria-label="Recipient">
-              {RECIPIENTS.map((r) => (
-                <button key={r.id} className={'seg-btn' + (recipient === r.id ? ' active' : '')} onClick={() => setRecipient(r.id)}>
-                  {r.name}
-                </button>
-              ))}
-            </div>
+            <RecipientPicker options={recipientOptions} value={recipient} onChange={setRecipient} />
           </div>
           <div className="field">
             <label className="field-label">Message</label>
@@ -143,7 +145,7 @@ export function INeedYou() {
           {error ? <div className="field-error" style={{ marginBottom: 10 }}>{error}</div> : null}
           <button
             className="btn btn-danger btn-block"
-            disabled={busy || !message.trim()}
+            disabled={busy || !recipient || !message.trim()}
             onClick={send}
           >
             {busy ? 'Sending…' : '🚨 Send alert'}
@@ -182,7 +184,7 @@ export function INeedYou() {
                 <Avatar name={a.forMe ? a.requester.displayName : a.recipient.displayName} colorId={a.forMe ? a.requester.avatarColor : a.recipient.avatarColor} size={34} />
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '.9rem', fontWeight: 600 }}>
-                    {a.forMe ? a.requester.displayName : previewRecipientName(a.recipient.id)}
+                    {a.forMe ? a.requester.displayName : a.recipient.displayName}
                   </div>
                   <div className="muted" style={{ fontSize: '.78rem' }}>{a.message}</div>
                 </div>

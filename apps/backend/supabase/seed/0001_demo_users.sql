@@ -46,12 +46,13 @@ values
   ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002')
 on conflict do nothing;
 
-insert into public.messages (conversation_id, sender_id, type, content, status)
+insert into public.messages (id, conversation_id, sender_id, type, content, status)
 values
-  ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'text',
+  ('20000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000001', 'text',
    'Welcome to Bond, Ben! 👋', 'delivered'),
-  ('10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'text',
-   'Love it here. Stay close. 🤝', 'read');
+  ('20000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'text',
+   'Love it here. Stay close. 🤝', 'read')
+on conflict (id) do nothing;
 
 -- Alice opts in to receive "I Need You" alerts from her connections.
 insert into public.i_need_you_prefs (user_id, opt_in)

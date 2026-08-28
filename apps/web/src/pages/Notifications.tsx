@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 import {
   listNotifications,
@@ -19,9 +20,20 @@ const TYPE_ICONS: Record<NotificationType, string> = {
   i_need_you: '🚨',
 };
 
+const TYPE_ROUTES: Record<NotificationType, string> = {
+  message: '/app',
+  connection: '/app/connections',
+  moment: '/app/moments',
+  shared: '/app/shared',
+  bond_lock: '/app/bond-lock',
+  surprise: '/app/surprise-box',
+  i_need_you: '/app/i-need-you',
+};
+
 export function Notifications() {
   const { session } = useAuth();
   const me = session?.userId ?? 'you';
+  const nav = useNavigate();
   const [items, setItems] = useState<AppNotification[]>([]);
 
   const load = useCallback(async () => {
@@ -33,9 +45,11 @@ export function Notifications() {
   }, [load]);
 
   const open = async (n: AppNotification) => {
-    if (n.read) return;
-    await markNotificationRead(me, n.id);
-    await load();
+    if (!n.read) {
+      await markNotificationRead(me, n.id);
+      await load();
+    }
+    nav(TYPE_ROUTES[n.type] ?? '/app');
   };
 
   const readAll = async () => {
