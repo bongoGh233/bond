@@ -69,22 +69,38 @@ export async function listConversations(currentUserId: string): Promise<Conversa
         }
       }
 
-      return Array.from(byConv.entries())
-        .map(([id, msg]) => {
+      return Array.from(new Set(convIds))
+        .map((id) => {
           const other = peerById.get(id);
+          const msg = byConv.get(id);
           return {
             id,
             other: other ?? { id: 'unknown', name: 'Connection', avatarColor: 0 },
-            last: msg.content,
-            lastAt: new Date(msg.createdAt).toLocaleString([], { hour: '2-digit', minute: '2-digit' }),
+            last: msg?.content,
+            lastAt: msg ? new Date(msg.createdAt).toLocaleString([], { hour: '2-digit', minute: '2-digit' }) : undefined,
           };
         })
-        .sort((a, b) => (b.lastAt ?? '').localeCompare(a.lastAt ?? ''));
+        .sort((a, b) => {
+          if (!a.lastAt && !b.lastAt) return 0;
+          if (!a.lastAt) return 1;
+          if (!b.lastAt) return -1;
+          return b.lastAt.localeCompare(a.lastAt);
+        });
     } catch {
       return [];
     }
   }
   return [];
+}
+
+export async function getOrCreateConversation(userId: string, otherId: string): Promise<{ id: string; error?: string }> {
+  if (!supabase || !isBackendConfigured) return { id: '', error: 'Backend not configured' };
+  const { data, error } = await supabase.rpc('get_or_create_conversation', {
+    p_user_id: userId,
+    p_other_id: otherId,
+  });
+  if (error || !data) return { id: '', error: error?.message ?? 'Could not start a conversation' };
+  return { id: data as string };
 }
 
 export async function listMessages(conversationId: string, currentUserId: string): Promise<Message[]> {

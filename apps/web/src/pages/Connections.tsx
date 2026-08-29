@@ -12,6 +12,7 @@ import {
   type ConnectionUser,
   type OutgoingRequest,
 } from '../api/connections';
+import { getOrCreateConversation } from '../chats';
 
 export function Connections() {
   const { session } = useAuth();
@@ -50,6 +51,12 @@ export function Connections() {
     setNotice(r.ok ? msg : (r.error ?? 'Something went wrong'));
     await load();
     setResults(await searchBondId(me, query));
+  };
+
+  const startChat = async (otherId: string) => {
+    const r = await getOrCreateConversation(me, otherId);
+    if (r.error) { setNotice(r.error); return; }
+    window.location.hash = '#/chats?convo=' + r.id;
   };
 
   return (
@@ -166,6 +173,13 @@ export function Connections() {
                   <div style={{ fontWeight: 600 }}>{c.displayName}</div>
                   <div className="muted" style={{ fontSize: '.8rem' }}>@{c.bondId}{c.bio ? ` · ${c.bio}` : ''}</div>
                 </div>
+                <button
+                  className="btn btn-secondary"
+                  style={{ padding: '8px 14px', width: 'auto' }}
+                  onClick={() => startChat(c.id)}
+                >
+                  Message
+                </button>
                 <button
                   className="btn btn-danger"
                   style={{ padding: '8px 14px', width: 'auto' }}

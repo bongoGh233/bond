@@ -167,24 +167,12 @@ function summarize(m: MessageRow): string {
  */
 export async function getOrCreateConversation(userId: string, otherId: string): Promise<{ id: string } | { error: string }> {
   if (isBackendConfigured && supabase) {
-    // Find an existing direct conversation where both are members.
-    const { data: mine } = await supabase.from('conversation_members').select('conversation_id').eq('user_id', userId);
-    const { data: theirs } = await supabase.from('conversation_members').select('conversation_id').eq('user_id', otherId);
-    const shared = mine?.map((m) => m.conversation_id).filter((id) => theirs?.some((t) => t.conversation_id === id)) ?? [];
-    if (shared.length > 0) return { id: shared[0] };
-
-    // Create a new direct conversation + both member rows.
-    const { data, error } = await supabase
-      .from('conversations')
-      .insert({ is_group: false, created_by: userId })
-      .select('id')
-      .single();
+    const { data, error } = await supabase.rpc('get_or_create_conversation', {
+      p_user_id: userId,
+      p_other_id: otherId,
+    });
     if (error || !data) return { error: error?.message ?? 'Failed to create conversation' };
-    const id = data.id;
-    const { error: e1 } = await supabase.from('conversation_members').insert({ conversation_id: id, user_id: userId });
-    const { error: e2 } = await supabase.from('conversation_members').insert({ conversation_id: id, user_id: otherId });
-    if (e1 || e2) return { error: e1?.message ?? e2?.message ?? 'Failed to add members' };
-    return { id };
+    return { id: data as string };
   }
   return { error: 'Backend not configured' };
 }

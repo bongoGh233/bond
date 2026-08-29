@@ -21,7 +21,13 @@ export function Chats() {
   useEffect(() => {
     listConversations(me).then((c) => {
       setConversations(c);
-      if (c.length && !activeId) setActiveId(c[0].id);
+      const m = window.location.hash.match(/[?&]convo=([0-9a-f-]+)/i);
+      const preset = m ? m[1] : null;
+      if (preset && c.some((x) => x.id === preset)) {
+        setActiveId(preset);
+      } else if (c.length) {
+        setActiveId(c[0].id);
+      }
     });
   }, [me]);
 
@@ -54,7 +60,7 @@ export function Chats() {
           </div>
           {conversations.length === 0 ? (
             <div className="empty"><div className="empty-icon">💬</div><h3>No conversations yet</h3>
-              <p>Connect with someone to start chatting.</p></div>
+              <p>Open Connections and tap Message next to someone to start chatting.</p></div>
           ) : (
             conversations.map((c) => (
               <div key={c.id} className={'chat-preview' + (c.id === activeId ? ' active' : '')}
