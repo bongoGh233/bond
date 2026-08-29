@@ -4,7 +4,7 @@ const BUCKET = 'bond-media';
 
 export interface UploadedMedia {
   objectName: string;
-  /** A URL that can be rendered (signed URL on backend, local URI in preview). */
+  /** A URL that can be rendered (signed URL from the backend, or the original URI if upload fails). */
   uri: string;
   mimeType: string;
 }
@@ -27,7 +27,7 @@ function extFor(mimeType: string): string {
  * Upload a media blob/file (or anything `fetch`-able, i.e. object URLs) into the
  * private `bond-media` bucket under `{ownerId}/{uuid}.{ext}`, register it in the
  * `media` registry so message/moment RLS can gate reads, and return a renderable
- * signed URL. In preview mode we keep the local (object) URL.
+ * signed URL. When the backend is not configured we return the original URI.
  */
 export async function uploadBondMedia(
   ownerId: string,
@@ -71,7 +71,7 @@ export async function uploadBondMedia(
   return { objectName: '', uri, mimeType };
 }
 
-/** Create a renderable object URL for a picked file (preview mode). */
+/** Create a renderable object URL for a picked file. */
 export function objectUrlFor(file: File): string {
   return URL.createObjectURL(file);
 }

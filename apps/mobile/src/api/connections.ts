@@ -43,30 +43,6 @@ function toConnectionUser(p: ProfileRow): ConnectionUser {
   };
 }
 
-/* ================================================================== */
-/* Preview-mode demo data                                             */
-/* ================================================================== */
-const PREVIEW_USERS: ConnectionUser[] = [
-  { id: 'p-alice', displayName: 'Alice', bondId: 'alice', avatarStyle: 0, avatarColor: 0, bio: 'Hello from Bond' },
-  { id: 'p-ben', displayName: 'Ben', bondId: 'ben', avatarStyle: 3, avatarColor: 2, bio: 'Stay close' },
-  { id: 'p-maya', displayName: 'Maya', bondId: 'maya', avatarStyle: 5, avatarColor: 1, bio: 'Coffee first' },
-  { id: 'p-rosa', displayName: 'Rosa', bondId: 'rosa', avatarStyle: 1, avatarColor: 3, bio: 'Family ♥' },
-
-  // Candidates for searching in preview mode.
-  { id: 'p-jordan', displayName: 'Jordan', bondId: 'jordan', avatarStyle: 2, avatarColor: 4, bio: 'New here ✨' },
-  { id: 'p-kai', displayName: 'Kai', bondId: 'kai', avatarStyle: 6, avatarColor: 6, bio: 'Music, food, travel' },
-];
-
-let previewState = {
-  connectedIds: new Set(['p-alice', 'p-ben']),
-  incomingIds: ['p-maya'],
-  outgoingIds: ['p-rosa'],
-};
-
-/* ================================================================== */
-/* API                                                                 */
-/* ================================================================== */
-
 /**
  * All currently accepted connections for the current user.
  */
@@ -77,7 +53,7 @@ export async function listConnections(userId: string): Promise<ConnectionUser[]>
       .select('user_a, user_b, profiles_a:profiles!connections_user_a_fkey(id, display_name, bond_id, avatar_style, avatar_color, bio), profiles_b:profiles!connections_user_b_fkey(id, display_name, bond_id, avatar_style, avatar_color, bio)')
       .or(`user_a.eq.${userId},user_b.eq.${userId}`)
       .eq('status', 'accepted');
-    if (error || !data) return previewConnections();
+    if (error || !data) return [];
     const list: ConnectionUser[] = [];
     for (const row of data) {
       const other =
@@ -90,11 +66,7 @@ export async function listConnections(userId: string): Promise<ConnectionUser[]>
     }
     return list;
   }
-  return previewConnections();
-}
-
-function previewConnections(): ConnectionUser[] {
-  return PREVIEW_USERS.filter((u) => previewState.connectedIds.has(u.id));
+  return [];
 }
 
 /**
@@ -108,7 +80,7 @@ export async function listRequests(userId: string): Promise<{ incoming: Connecti
       .select('id, user_a, user_b, requested_by, created_at, profiles_a:profiles!connections_user_a_fkey(id, display_name, bond_id, avatar_style, avatar_color, bio), profiles_b:profiles!connections_user_b_fkey(id, display_name, bond_id, avatar_style, avatar_color, bio)')
       .or(`user_a.eq.${userId},user_b.eq.${userId}`)
       .eq('status', 'pending');
-    if (error || !data) return previewRequests();
+    if (error || !data) return { incoming: [], outgoing: [] };
     const incoming: ConnectionRequest[] = [];
     const outgoing: OutgoingRequest[] = [];
     for (const row of data) {
@@ -127,23 +99,7 @@ export async function listRequests(userId: string): Promise<{ incoming: Connecti
     }
     return { incoming, outgoing };
   }
-  return previewRequests();
-}
-
-function previewRequests(): { incoming: ConnectionRequest[]; outgoing: OutgoingRequest[] } {
-  const incoming = previewState.incomingIds
-    .map((id): ConnectionRequest | null => {
-      const u = PREVIEW_USERS.find((x) => x.id === id);
-      return u ? { id: `req-${id}`, user: u, direction: 'incoming', createdAt: new Date().toISOString() } : null;
-    })
-    .filter((x): x is ConnectionRequest => Boolean(x));
-  const outgoing = previewState.outgoingIds
-    .map((id): OutgoingRequest | null => {
-      const u = PREVIEW_USERS.find((x) => x.id === id);
-      return u ? { id: `req-${id}`, user: u, createdAt: new Date().toISOString() } : null;
-    })
-    .filter((x): x is OutgoingRequest => Boolean(x));
-  return { incoming, outgoing };
+  return { incoming: [], outgoing: [] };
 }
 
 /**
@@ -160,7 +116,7 @@ export async function searchBondId(userId: string, query: string): Promise<Conne
       .select('id, display_name, bond_id, avatar_style, avatar_color, bio')
       .or(`bond_id.ilike.%${q}%,display_name.ilike.%${q}%`)
       .limit(20);
-    if (error || !data) return previewSearch(query);
+    if (error || !data) return [];
     // Build the set of IDs we're already connected with (accepted or pending).
     const { data: conns } = await supabase
       .from('connections')
@@ -180,17 +136,7 @@ export async function searchBondId(userId: string, query: string): Promise<Conne
         bio: p.bio,
       }));
   }
-  return previewSearch(query);
-}
-
-function previewSearch(query: string): ConnectionUser[] {
-  return PREVIEW_USERS.filter(
-    (u) =>
-      (u.bondId.includes(query) || u.displayName.toLowerCase().includes(query)) &&
-      !previewState.connectedIds.has(u.id) &&
-      !previewState.incomingIds.includes(u.id) &&
-      !previewState.outgoingIds.includes(u.id)
-  );
+  return [];
 }
 
 /**
@@ -210,9 +156,7 @@ export async function sendRequest(userId: string, otherId: string): Promise<{ ok
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   }
-  const u = PREVIEW_USERS.find((x) => x.id === otherId);
-  if (u) previewState.outgoingIds.push(otherId);
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 /**
@@ -239,16 +183,7 @@ export async function respondRequest(
     }
     return { ok: true };
   }
-  if (action === 'accept') {
-    const u = PREVIEW_USERS.find((x) => previewState.incomingIds.includes(x.id));
-    if (u) {
-      previewState.incomingIds = previewState.incomingIds.filter((id) => id !== u.id);
-      previewState.connectedIds.add(u.id);
-    }
-  } else {
-    previewState.incomingIds = previewState.incomingIds.filter((id) => id !== connectionId.replace('req-', ''));
-  }
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 /**
@@ -260,6 +195,5 @@ export async function removeConnection(userId: string, connectionId: string): Pr
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   }
-  previewState.connectedIds = new Set([...previewState.connectedIds].filter((id) => id !== connectionId));
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }

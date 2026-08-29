@@ -16,7 +16,6 @@ sql_paths = ["./seed"]
 
 [functions.process-push-outbox]
 verify_jwt = false
-import_map = null
 
 [auth]
 enabled = true

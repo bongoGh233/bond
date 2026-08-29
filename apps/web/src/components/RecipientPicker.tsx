@@ -2,9 +2,7 @@ import { useEffect, useState } from 'react';
 import { listConnections, type ConnectionUser } from '../api/connections';
 
 /**
- * Load the current user's connection list for recipient pickers. In preview
- * mode this resolves to the demo connections; with a backend it returns real
- * accepted connections.
+ * Load the current user's accepted-connection list for recipient pickers.
  */
 export function useRecipients(me: string): { options: ConnectionUser[]; loaded: boolean } {
   const [options, setOptions] = useState<ConnectionUser[]>([]);

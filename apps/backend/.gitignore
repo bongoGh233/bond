@@ -1,0 +1,7 @@
+# Supabase CLI link/secret caches — may contain real credentials, never commit.
+supabase/.temp/
+supabase/.branches/
+
+# Real credentials
+.env
+.env.local

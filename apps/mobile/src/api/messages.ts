@@ -91,50 +91,6 @@ function toMessage(row: MessageRow): ChatMessage {
 }
 
 /* ================================================================== */
-/* Preview-mode demo data                                             */
-/* ================================================================== */
-
-const PREVIEW_USERS: ChatParticipant[] = [
-  { id: 'p-alice', displayName: 'Alice', bondId: 'alice', avatarStyle: 0, avatarColor: 0 },
-  { id: 'p-ben', displayName: 'Ben', bondId: 'ben', avatarStyle: 3, avatarColor: 2 },
-  { id: 'p-maya', displayName: 'Maya', bondId: 'maya', avatarStyle: 5, avatarColor: 1 },
-  { id: 'p-rosa', displayName: 'Rosa', bondId: 'rosa', avatarStyle: 1, avatarColor: 3 },
-];
-
-interface PreviewMessage extends ChatMessage {}
-
-interface PreviewConvo {
-  otherId: string;
-  messages: PreviewMessage[];
-}
-
-let previewConversations: PreviewConvo[] = [
-  {
-    otherId: 'p-alice',
-    messages: [
-      { id: 'pm-1', conversationId: 'pc-alice', senderId: 'p-alice', type: 'text', content: 'Hey! Are we still on for Friday?', status: 'read', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString() },
-      { id: 'pm-2', conversationId: 'pc-alice', senderId: 'you', type: 'text', content: 'Yes! 7pm at the usual place 🎉', status: 'read', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 1.5).toISOString() },
-      { id: 'pm-3', conversationId: 'pc-alice', senderId: 'p-alice', type: 'text', content: 'Perfect, see you there.', status: 'delivered', createdAt: new Date(Date.now() - 1000 * 60 * 30).toISOString() },
-    ],
-  },
-  {
-    otherId: 'p-ben',
-    messages: [
-      { id: 'pm-4', conversationId: 'pc-ben', senderId: 'p-ben', type: 'text', content: 'Got the photos from the trip 😍', status: 'read', createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString() },
-    ],
-  },
-];
-
-const previewMessageId = (() => {
-  let n = 100;
-  return () => `pm-${n++}`;
-})();
-
-function previewConvoFor(otherId: string): PreviewConvo | undefined {
-  return previewConversations.find((c) => c.otherId === otherId);
-}
-
-/* ================================================================== */
 /* API — conversations                                                 */
 /* ================================================================== */
 
@@ -149,7 +105,7 @@ export async function listConversations(userId: string): Promise<ConversationSum
       .from('conversation_members')
       .select('conversation_id, conversation:conversations!inner(id, is_group, title)')
       .eq('user_id', userId);
-    if (error || !mine) return previewConversationsList(userId);
+    if (error || !mine) return [];
     const convoIds = mine.map((m) => m.conversation_id as string);
 
     // The other participant in each direct conversation.
@@ -195,7 +151,7 @@ export async function listConversations(userId: string): Promise<ConversationSum
     }
     return summaries.sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
   }
-  return previewConversationsList(userId);
+  return [];
 }
 
 function summarize(m: MessageRow): string {
@@ -204,25 +160,6 @@ function summarize(m: MessageRow): string {
   if (m.type === 'voice') return '🎙️ Voice message';
   if (m.type === 'document') return '📄 Document';
   return m.content;
-}
-
-function previewConversationsList(userId: string): ConversationSummary[] {
-  const summaries = previewConversations.map((c) => {
-    const other = PREVIEW_USERS.find((u) => u.id === c.otherId);
-    if (!other) return null;
-    const last = c.messages[c.messages.length - 1];
-    return {
-      id: c.messages[0].conversationId,
-      other,
-      lastMessage: last.type === 'image' ? '📷 Photo' : last.content,
-      lastMessageAt: last.createdAt,
-      lastMessageType: last.type,
-      unread: last.senderId !== 'you',
-    } as ConversationSummary;
-  });
-  return summaries
-    .filter((s): s is ConversationSummary => Boolean(s))
-    .sort((a, b) => b.lastMessageAt.localeCompare(a.lastMessageAt));
 }
 
 /**
@@ -249,7 +186,7 @@ export async function getOrCreateConversation(userId: string, otherId: string): 
     if (e1 || e2) return { error: e1?.message ?? e2?.message ?? 'Failed to add members' };
     return { id };
   }
-  return { id: previewConvoFor(otherId)?.messages[0].conversationId ?? `pc-${otherId}` };
+  return { error: 'Backend not configured' };
 }
 
 /* ================================================================== */
@@ -266,19 +203,7 @@ export async function listMessages(conversationId: string): Promise<ChatMessage[
     if (error || !data) return [];
     return (data as MessageRow[]).map(toMessage);
   }
-  return previewConversations.find((c) => c.messages[0]?.conversationId === conversationId)?.messages ?? [];
-}
-
-function pushPreviewMessage(otherId: string, msg: PreviewMessage) {
-  const convo = previewConvoFor(otherId);
-  const id = convo?.messages[0]?.conversationId ?? `pc-${otherId}`;
-  const m: PreviewMessage = { ...msg, id: msg.id ?? previewMessageId(), conversationId: id };
-  if (convo) {
-    convo.messages.push(m);
-  } else {
-    previewConversations.push({ otherId, messages: [m] });
-  }
-  return m;
+  return [];
 }
 
 /**
@@ -302,35 +227,21 @@ export async function sendTextMessage(
     return { ok: true, message: toMessage(data as MessageRow) };
   }
 
-  const convo = previewConversations.find((c) => c.messages[0]?.conversationId === conversationId);
-  const otherId = convo?.otherId ?? conversationId.replace('pc-', '');
-  const m = pushPreviewMessage(otherId, {
-    id: '',
-    conversationId,
-    senderId,
-    type: 'text',
-    content: trimmed,
-    status: 'sent',
-    createdAt: new Date().toISOString(),
-  });
-  return { ok: true, message: m };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 /**
  * Send a photo message.
  *
- * NOTE: Real photo upload requires `expo-image-picker` + Supabase Storage
- * (migration 0003 already provisions the `bond-media` bucket + RLS). That native
- * dependency isn't installed in this prototype, so in preview mode we send an
- * inline "photo" message with the provided URI (or a placeholder). The upload
- * path is documented for Phase 6.
+ * Real photo upload requires `expo-image-picker` + Supabase Storage
+ * (migration 0003 already provisions the `bond-media` bucket + RLS).
  */
 export async function sendPhotoMessage(
   conversationId: string,
   senderId: string,
   uri?: string
 ): Promise<{ ok: boolean; message?: ChatMessage; error?: string }> {
-  const mediaMetadata: MediaMetadata = { uri: uri ?? 'bond://preview-photo-placeholder', mimeType: 'image/jpeg' };
+  const mediaMetadata: MediaMetadata = { uri: uri ?? '', mimeType: 'image/jpeg' };
 
   if (isBackendConfigured && supabase) {
     if (!uri) return { ok: false, error: 'No photo selected' };
@@ -367,24 +278,12 @@ export async function sendPhotoMessage(
     return { ok: true, message: toMessage(data as MessageRow) };
   }
 
-  const convo = previewConversations.find((c) => c.messages[0]?.conversationId === conversationId);
-  const otherId = convo?.otherId ?? conversationId.replace('pc-', '');
-  const m = pushPreviewMessage(otherId, {
-    id: '',
-    conversationId,
-    senderId,
-    type: 'image',
-    content: '',
-    mediaMetadata,
-    status: 'sent',
-    createdAt: new Date().toISOString(),
-  });
-  return { ok: true, message: m };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 /**
  * Real-time subscription for new messages in a conversation (Supabase only).
- * Returns an unsubscribe function. In preview mode we no-op.
+ * Returns an unsubscribe function. When unconfigured we no-op.
  */
 export function subscribeToMessages(
   conversationId: string,

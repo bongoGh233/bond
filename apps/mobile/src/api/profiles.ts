@@ -10,8 +10,7 @@ export interface ProfileInput {
 
 /**
  * Update the current user's profile row.
- * In Supabase mode this writes to `profiles` (RLS allows the owner only).
- * Preview mode is a no-op placeholder (UI can still update the local session).
+ * Writes to `profiles` (RLS allows the owner only).
  */
 export async function updateProfile(input: ProfileInput): Promise<{ ok: boolean; error?: string }> {
   if (isBackendConfigured && supabase) {

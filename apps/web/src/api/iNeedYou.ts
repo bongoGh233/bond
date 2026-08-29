@@ -64,34 +64,6 @@ function toProfile(p: ProfileEmbed): { id: string; displayName: string; bondId: 
 }
 
 /* ================================================================== */
-/* Preview-mode demo data                                             */
-/* ================================================================== */
-
-let previewAlerts: INeedYouAlert[] = [
-  {
-    id: 'iny-1',
-    requester: { id: 'p-alice', displayName: 'Alice', bondId: 'alice', avatarStyle: 0, avatarColor: 0 },
-    recipient: { id: 'you', displayName: 'You', bondId: 'bond_demo', avatarStyle: 0, avatarColor: 0 },
-    message: 'I need you — can you call me?',
-    status: 'pending',
-    createdAt: new Date(Date.now() - 1000 * 60 * 6).toISOString(),
-    forMe: true,
-  },
-];
-
-let previewPrefs: INeedYouPrefs = { optIn: true, quietHours: { enabled: false } };
-
-const previewAlertId = (() => {
-  let n = 10;
-  return () => `iny-${n++}`;
-})();
-
-export function previewRecipientName(recipientId: string): string {
-  const known: Record<string, string> = { 'p-alice': 'Alice', 'p-ben': 'Ben', 'p-maya': 'Maya', 'p-rosa': 'Rosa' };
-  return known[recipientId] ?? recipientId;
-}
-
-/* ================================================================== */
 /* API                                                                 */
 /* ================================================================== */
 
@@ -107,7 +79,7 @@ export async function listINeedYouAlerts(userId: string): Promise<INeedYouAlert[
       )
       .or(`requester_id.eq.${userId},recipient_id.eq.${userId}`)
       .order('created_at', { ascending: false });
-    if (error || !data) return previewAlerts.slice();
+    if (error || !data) return [];
     const items: INeedYouAlert[] = [];
     for (const row of data as unknown as IAlertRow[]) {
       if (!row.requester || !row.recipient) continue;
@@ -125,7 +97,7 @@ export async function listINeedYouAlerts(userId: string): Promise<INeedYouAlert[
     }
     return items;
   }
-  return previewAlerts.slice();
+  return [];
 }
 
 export async function getINeedYouPrefs(userId: string): Promise<INeedYouPrefs> {
@@ -136,16 +108,14 @@ export async function getINeedYouPrefs(userId: string): Promise<INeedYouPrefs> {
     if (row) return { optIn: row.opt_in, quietHours: row.quiet_hours ?? { enabled: false } };
     return { optIn: false, quietHours: { enabled: false } };
   }
-  return previewPrefs;
+  return { optIn: false, quietHours: { enabled: false } };
 }
 
 export async function updateINeedYouPrefs(userId: string, prefs: INeedYouPrefs): Promise<void> {
   if (isBackendConfigured && supabase) {
     const client = supabase;
     await client.from('i_need_you_prefs').upsert({ user_id: userId, opt_in: prefs.optIn, quiet_hours: prefs.quietHours });
-    return;
   }
-  previewPrefs = prefs;
 }
 
 export async function sendINeedYouAlert(
@@ -164,17 +134,7 @@ export async function sendINeedYouAlert(
     return { ok: true };
   }
 
-  const recipientName = previewAlerts.find((a) => a.recipient.id === recipientId)?.recipient.displayName ?? previewRecipientName(recipientId);
-  previewAlerts.unshift({
-    id: previewAlertId(),
-    requester: { id: requesterId, displayName: 'You', bondId: 'bond_demo', avatarStyle: 0, avatarColor: 0 },
-    recipient: { id: recipientId, displayName: recipientName, bondId: recipientId, avatarStyle: 0, avatarColor: 0 },
-    message: trimmed,
-    status: 'pending',
-    createdAt: new Date().toISOString(),
-    forMe: false,
-  });
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 export async function acknowledgeAlert(userId: string, alertId: string, action: AckAction): Promise<{ ok: boolean; error?: string }> {
@@ -188,13 +148,7 @@ export async function acknowledgeAlert(userId: string, alertId: string, action: 
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   }
-  const item = previewAlerts.find((a) => a.id === alertId && a.forMe);
-  if (item) {
-    item.status = action === 'answered' ? 'answered' : 'acknowledged';
-    item.ackAction = action;
-    item.ackedAt = new Date().toISOString();
-  }
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 export function subscribeToAlerts(userId: string, onChange: () => void): () => void {

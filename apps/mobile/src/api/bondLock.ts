@@ -57,51 +57,6 @@ interface BondGrantRow {
   message: MessageEmbed | null;
 }
 
-/* ================================================================== */
-/* Preview-mode demo data                                             */
-/* ================================================================== */
-
-let previewLocks: BondLockItem[] = [
-  {
-    id: 'bl-1',
-    messageId: 'pm-lock-1',
-    senderId: 'p-alice',
-    senderName: 'Alice',
-    senderBondId: 'alice',
-    senderAvatarStyle: 0,
-    senderAvatarColor: 0,
-    content: '🔒 A private note — photo of our surprise for Friday. Unlock to reveal.',
-    accessMode: 'one_time',
-    accessToken: 'BOND-ALPHA',
-    createdAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
-    isMine: false,
-    status: 'granted',
-    remainUses: 1,
-  },
-  {
-    id: 'bl-2',
-    messageId: 'pm-lock-2',
-    senderId: 'you',
-    senderName: 'You',
-    senderBondId: 'bond_demo',
-    senderAvatarStyle: 0,
-    senderAvatarColor: 0,
-    content: '🔐 The itinerary — locked for Ben.',
-    accessMode: 'time_limited',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 20).toISOString(),
-    expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 3).toISOString(),
-    isMine: true,
-    status: 'granted',
-    remainUses: 3,
-  },
-];
-
-let previewId = 10;
-
-/* ================================================================== */
-/* API                                                                 */
-/* ================================================================== */
-
 /**
  * Bonds granted TO the current user (they need to be unlocked), plus bonds
  * the current user sent (their locked items). In other words: everything the
@@ -118,7 +73,7 @@ export async function listBondLocks(userId: string): Promise<BondLockItem[]> {
           'message:messages!bond_lock_grants_message_id_fkey(id, content, created_at)'
       )
       .or(`sender_id.eq.${userId},grantee_id.eq.${userId}`);
-    if (error || !data) return previewLocks.slice();
+    if (error || !data) return [];
     const items: BondLockItem[] = [];
     for (const row of data as unknown as BondGrantRow[]) {
       const sender = row.sender;
@@ -142,12 +97,9 @@ export async function listBondLocks(userId: string): Promise<BondLockItem[]> {
     }
     return items.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
-  return previewLocks.slice();
+  return [];
 }
 
-/**
- * Preview-only helper used by the demo state so mutations are reflected.
- */
 export async function listMyBondLocks(userId: string): Promise<BondLockItem[]> {
   const all = await listBondLocks(userId);
   return all.filter((i) => i.isMine);
@@ -201,26 +153,7 @@ export async function createBondLock(
     return { ok: true };
   }
 
-  previewLocks.unshift({
-    id: `bl-${previewId++}`,
-    messageId: `pm-lock-${previewId}`,
-    senderId: userId,
-    senderName: 'You',
-    senderBondId: 'bond_demo',
-    senderAvatarStyle: 0,
-    senderAvatarColor: 0,
-    content: trimmed,
-    accessMode: mode,
-    accessToken: `BOND-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
-    createdAt: new Date().toISOString(),
-    expiresAt: mode === 'time_limited' && durationHours
-      ? new Date(Date.now() + durationHours * 3600_000).toISOString()
-      : undefined,
-    isMine: true,
-    status: 'granted',
-    remainUses: mode === 'one_time' ? 1 : mode === 'time_limited' ? 5 : undefined,
-  });
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 /**
@@ -240,16 +173,7 @@ export async function unlockBond(
     return { ok: true, content: payload?.content ?? '' };
   }
 
-  const item = previewLocks.find((i) => i.id === grantId);
-  if (!item) return { ok: false, error: 'Grant not found' };
-  if (item.status !== 'granted') return { ok: false, error: 'This bond is no longer available' };
-  if (item.accessMode === 'one_time' || (item.remainUses !== undefined && item.remainUses <= 1)) {
-    item.status = 'expired';
-    item.remainUses = 0;
-  } else if (item.remainUses !== undefined) {
-    item.remainUses -= 1;
-  }
-  return { ok: true, content: item.content };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 /**
@@ -262,7 +186,5 @@ export async function revokeBond(userId: string, grantId: string): Promise<{ ok:
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   }
-  const item = previewLocks.find((i) => i.id === grantId && i.isMine);
-  if (item) item.status = 'revoked';
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }

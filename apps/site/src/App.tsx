@@ -84,7 +84,7 @@ function Hero() {
           and partners. Communicate, share moments and feel connected, your way.
         </p>
         <div className="hero-cta">
-          <a className="btn btn-primary" href="#download">Get the app</a>
+          <a className="btn btn-primary" href="https://web-six-jade-57.vercel.app">Try the web companion</a>
           <a className="btn btn-secondary" href="#features">Explore features</a>
         </div>
         <p className="muted" style={{ marginTop: 20, fontSize: '0.85rem' }}>
@@ -237,15 +237,16 @@ function Download() {
   return (
     <section className="section section-alt" id="download">
       <div className="container center" style={{ maxWidth: 640 }}>
-        <span className="eyebrow">Get Bond</span>
-        <h2 className="h2">Try the prototype, see the code</h2>
+        <span className="eyebrow">Access Bond</span>
+        <h2 className="h2">On your phone, and on your computer</h2>
         <p className="lead" style={{ margin: '16px 0 32px' }}>
-          Bond is an early prototype. The web companion runs in your browser and the
-          native apps are in active development — watch the repo for builds.
+          Bond is built around the mobile app — with a web companion for when
+          you're at your desk, and this site to introduce it. The web companion
+          is live today; native apps are in active development.
         </p>
         <div className="hero-cta" style={{ justifyContent: 'center' }}>
-          <a className="btn btn-primary" href="https://github.com/bongoGh233/bond">View the project on GitHub</a>
-          <a className="btn btn-secondary" href="#features">Explore the features</a>
+          <a className="btn btn-primary" href="https://web-six-jade-57.vercel.app">Open the web companion</a>
+          <a className="btn btn-secondary" href="https://github.com/bongoGh233/bond">View the project on GitHub</a>
         </div>
       </div>
     </section>

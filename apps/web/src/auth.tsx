@@ -18,11 +18,6 @@ interface AuthCtx {
 
 const Ctx = createContext<AuthCtx | undefined>(undefined);
 
-function sessionFromEmail(email: string): Session {
-  const base = email.split('@')[0] || 'you';
-  return { userId: `local-${Date.now()}`, email, displayName: base, bondId: base };
-}
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [status, setStatus] = useState<'loading' | 'signedOut' | 'signedIn'>('loading');
   const [session, setSession] = useState<Session | null>(null);
@@ -63,9 +58,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setStatus('signedIn');
         return { ok: true };
       }
-      setSession(sessionFromEmail(email));
-      setStatus('signedIn');
-      return { ok: true };
+      return { ok: false, error: 'Backend not configured' };
     },
     signup: async (email, password, displayName) => {
       if (isBackendConfigured && supabase) {
@@ -83,9 +76,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setStatus('signedIn');
         return { ok: true };
       }
-      setSession(sessionFromEmail(email));
-      setStatus('signedIn');
-      return { ok: true };
+      return { ok: false, error: 'Backend not configured' };
     },
     logout: async () => {
       if (supabase) await supabase.auth.signOut();

@@ -66,62 +66,9 @@ function mimeForAudio(uri: string): string {
   return 'audio/mp4';
 }
 
-/* ================================================================== */
-/* Preview-mode demo data                                             */
-/* ================================================================== */
-
-let previewDiary: VoiceDiaryEntry[] = [
-  {
-    id: 'vd-1',
-    userId: 'you',
-    audience: 'private',
-    voiceUri: 'bond://preview-voice-1',
-    transcript: 'Morning thoughts. I should call Dad today.',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    mine: true,
-    authorName: 'You',
-    authorAvatarStyle: 0,
-    authorAvatarColor: 0,
-  },
-  {
-    id: 'vd-2',
-    userId: 'p-alice',
-    audience: 'connections',
-    voiceUri: 'bond://preview-voice-2',
-    transcript: 'This song makes me think of the beach trip. Recording it here so you hear it too.',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString(),
-    mine: false,
-    authorName: 'Alice',
-    authorAvatarStyle: 0,
-    authorAvatarColor: 0,
-  },
-  {
-    id: 'vd-3',
-    userId: 'p-ben',
-    audience: 'connections',
-    voiceUri: 'bond://preview-voice-3',
-    transcript: 'Quick update — the hike was incredible. Listen when you can.',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 50).toISOString(),
-    mine: false,
-    authorName: 'Ben',
-    authorAvatarStyle: 3,
-    authorAvatarColor: 2,
-  },
-];
-
-const previewDiarySeq = (() => {
-  let n = 10;
-  return () => `vd-${n++}`;
-})();
-
-/* ================================================================== */
-/* API                                                                 */
-/* ================================================================== */
-
 /**
  * List voice diary entries the current user can see (their own, plus entries
- * shared to connections or to spaces they belong to). In preview mode we simply
- * return the demo list.
+ * shared to connections or to spaces they belong to).
  */
 export async function listVoiceDiaries(userId: string): Promise<VoiceDiaryEntry[]> {
   if (isBackendConfigured && supabase) {
@@ -133,7 +80,7 @@ export async function listVoiceDiaries(userId: string): Promise<VoiceDiaryEntry[
       )
       .order('created_at', { ascending: false })
       .limit(100);
-    if (error || !data) return previewDiary.slice().filter((e) => !isExpired(e));
+    if (error || !data) return [];
     const list: VoiceDiaryEntry[] = [];
     for (const row of data as unknown as VoiceDiaryRow[]) {
       const entry = toEntry(row, (row as unknown as { author: AuthorEmbed | null }).author ?? null, userId);
@@ -142,7 +89,7 @@ export async function listVoiceDiaries(userId: string): Promise<VoiceDiaryEntry[
     }
     return list;
   }
-  return previewDiary.slice().filter((e) => !isExpired(e));
+  return [];
 }
 
 /**
@@ -152,7 +99,7 @@ export async function listVoiceDiaries(userId: string): Promise<VoiceDiaryEntry[
  * `bond-media` bucket (owner folder) and the registry row is linked to the
  * diary so storage read authorization (message/moment/voice-diary rules) can
  * gate access for connections. `voice_uri` stores the storage object path in
- * that case; local URI is kept when upload fails or in preview mode.
+ * that case; the local URI is kept when the upload fails.
  */
 export async function createVoiceDiary(
   userId: string,
@@ -197,21 +144,7 @@ export async function createVoiceDiary(
     return { ok: true };
   }
 
-  previewDiary.unshift({
-    id: previewDiarySeq(),
-    userId,
-    audience: opts.audience,
-    spaceId: opts.spaceId,
-    voiceUri: opts.voiceUri,
-    transcript: opts.transcript?.trim() || undefined,
-    createdAt: new Date().toISOString(),
-    expiresAt: opts.expiresAt,
-    mine: true,
-    authorName: 'You',
-    authorAvatarStyle: 0,
-    authorAvatarColor: 0,
-  });
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 /**
@@ -223,6 +156,5 @@ export async function deleteVoiceDiary(userId: string, entryId: string): Promise
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   }
-  previewDiary = previewDiary.filter((e) => !(e.id === entryId && e.mine));
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }

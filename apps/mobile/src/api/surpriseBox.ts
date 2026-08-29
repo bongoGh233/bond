@@ -60,44 +60,6 @@ function toProfile(p: ProfileEmbed): { id: string; displayName: string; bondId: 
   };
 }
 
-/* ================================================================== */
-/* Preview-mode demo data                                             */
-/* ================================================================== */
-
-let previewBoxes: SurpriseBox[] = [
-  {
-    id: 'sb-1',
-    type: 'message',
-    content: 'Happy early birthday 🎂 — I hid a little something for you. Open it when the date comes.',
-    revealAt: new Date(Date.now() + 1000 * 60 * 60 * 24).toISOString(),
-    opened: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
-    sender: { id: 'p-alice', displayName: 'Alice', bondId: 'alice', avatarStyle: 0, avatarColor: 0 },
-    recipient: { id: 'you', displayName: 'You', bondId: 'bond_demo', avatarStyle: 0, avatarColor: 0 },
-    mine: true,
-  },
-  {
-    id: 'sb-2',
-    type: 'message',
-    content: 'Remember this — a plan we made for the weekend. XO',
-    revealAt: new Date(Date.now() + 1000 * 60 * 60 * 24 * 2).toISOString(),
-    opened: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString(),
-    sender: { id: 'you', displayName: 'You', bondId: 'bond_demo', avatarStyle: 0, avatarColor: 0 },
-    recipient: { id: 'p-ben', displayName: 'Ben', bondId: 'ben', avatarStyle: 3, avatarColor: 2 },
-    mine: false,
-  },
-];
-
-const previewBoxId = (() => {
-  let n = 10;
-  return () => `sb-${n++}`;
-})();
-
-/* ================================================================== */
-/* API                                                                 */
-/* ================================================================== */
-
 export async function listSurpriseBoxes(userId: string): Promise<SurpriseBox[]> {
   if (isBackendConfigured && supabase) {
     const client = supabase;
@@ -110,7 +72,7 @@ export async function listSurpriseBoxes(userId: string): Promise<SurpriseBox[]> 
       )
       .or(`sender_id.eq.${userId},recipient_id.eq.${userId}`)
       .order('reveal_at', { ascending: true });
-    if (error || !data) return previewBoxes.slice();
+    if (error || !data) return [];
     const items: SurpriseBox[] = [];
     for (const row of data as unknown as SurpriseBoxRow[]) {
       if (!row.sender || !row.recipient) continue;
@@ -129,7 +91,7 @@ export async function listSurpriseBoxes(userId: string): Promise<SurpriseBox[]> 
     }
     return items;
   }
-  return previewBoxes.slice();
+  return [];
 }
 
 /**
@@ -163,24 +125,7 @@ export async function createSurprise(
     return { ok: true };
   }
 
-  previewBoxes.push({
-    id: previewBoxId(),
-    type: 'message',
-    content: trimmed,
-    revealAt,
-    opened: false,
-    createdAt: new Date().toISOString(),
-    sender: { id: senderId, displayName: 'You', bondId: 'bond_demo', avatarStyle: 0, avatarColor: 0 },
-    recipient: {
-      id: recipientId,
-      displayName: recipientId,
-      bondId: recipientId,
-      avatarStyle: 0,
-      avatarColor: 0,
-    },
-    mine: false,
-  });
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 /**
@@ -211,14 +156,7 @@ export async function openSurprise(
     return { ok: true, content: b.content };
   }
 
-  const item = previewBoxes.find((i) => i.id === boxId && i.mine);
-  if (!item) return { ok: false, error: 'Surprise not found' };
-  if (new Date(item.revealAt).getTime() > Date.now()) {
-    return { ok: false, error: 'This surprise is not ready yet' };
-  }
-  item.opened = true;
-  item.openedAt = new Date().toISOString();
-  return { ok: true, content: item.content };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 /**
@@ -234,6 +172,5 @@ export async function deleteSurprise(
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   }
-  previewBoxes = previewBoxes.filter((i) => !(i.id === boxId && !i.mine));
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }

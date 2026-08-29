@@ -58,54 +58,6 @@ function isExpired(e: VoiceDiaryEntry): boolean {
 }
 
 /* ================================================================== */
-/* Preview-mode demo data                                             */
-/* ================================================================== */
-
-let previewDiary: VoiceDiaryEntry[] = [
-  {
-    id: 'vd-1',
-    userId: 'you',
-    audience: 'private',
-    voiceUri: 'bond://preview-voice-1',
-    transcript: 'Morning thoughts. I should call Dad today.',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString(),
-    mine: true,
-    authorName: 'You',
-    authorAvatarStyle: 0,
-    authorAvatarColor: 0,
-  },
-  {
-    id: 'vd-2',
-    userId: 'p-alice',
-    audience: 'connections',
-    voiceUri: 'bond://preview-voice-2',
-    transcript: 'This song makes me think of the beach trip. Recording it here so you hear it too.',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString(),
-    mine: false,
-    authorName: 'Alice',
-    authorAvatarStyle: 0,
-    authorAvatarColor: 0,
-  },
-  {
-    id: 'vd-3',
-    userId: 'p-ben',
-    audience: 'connections',
-    voiceUri: 'bond://preview-voice-3',
-    transcript: 'Quick update — the hike was incredible. Listen when you can.',
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 50).toISOString(),
-    mine: false,
-    authorName: 'Ben',
-    authorAvatarStyle: 3,
-    authorAvatarColor: 2,
-  },
-];
-
-const previewDiarySeq = (() => {
-  let n = 10;
-  return () => `vd-${n++}`;
-})();
-
-/* ================================================================== */
 /* API                                                                 */
 /* ================================================================== */
 
@@ -119,7 +71,7 @@ export async function listVoiceDiaries(userId: string): Promise<VoiceDiaryEntry[
       )
       .order('created_at', { ascending: false })
       .limit(100);
-    if (error || !data) return previewDiary.slice().filter((e) => !isExpired(e));
+    if (error || !data) return [];
     const list: VoiceDiaryEntry[] = [];
     for (const row of data as unknown as VoiceDiaryRow[]) {
       const entry = toEntry(row, (row as unknown as { author: AuthorEmbed | null }).author ?? null, userId);
@@ -128,7 +80,7 @@ export async function listVoiceDiaries(userId: string): Promise<VoiceDiaryEntry[
     }
     return list;
   }
-  return previewDiary.slice().filter((e) => !isExpired(e));
+  return [];
 }
 
 export async function createVoiceDiary(
@@ -150,21 +102,7 @@ export async function createVoiceDiary(
     return { ok: true };
   }
 
-  previewDiary.unshift({
-    id: previewDiarySeq(),
-    userId,
-    audience: opts.audience,
-    spaceId: opts.spaceId,
-    voiceUri: opts.voiceUri,
-    transcript: opts.transcript?.trim() || undefined,
-    createdAt: new Date().toISOString(),
-    expiresAt: opts.expiresAt,
-    mine: true,
-    authorName: 'You',
-    authorAvatarStyle: 0,
-    authorAvatarColor: 0,
-  });
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 export async function deleteVoiceDiary(userId: string, entryId: string): Promise<{ ok: boolean; error?: string }> {
@@ -173,6 +111,5 @@ export async function deleteVoiceDiary(userId: string, entryId: string): Promise
     if (error) return { ok: false, error: error.message };
     return { ok: true };
   }
-  previewDiary = previewDiary.filter((e) => !(e.id === entryId && e.mine));
-  return { ok: true };
+  return { ok: false, error: 'Backend not configured' };
 }

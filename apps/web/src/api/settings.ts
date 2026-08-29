@@ -1,9 +1,9 @@
 import { supabase, isBackendConfigured } from '../supabase';
 
 /**
- * User preferences persisted to `user_settings.settings` (JSONB) when a
- * backend is configured, or localStorage in preview mode. `push_notifications`
- * and `quiet_hours` are honored server-side by the push pipeline.
+ * User preferences persisted to `user_settings.settings` (JSONB).
+ * `push_notifications` and `quiet_hours` are honored server-side by the
+ * push pipeline.
  */
 export interface AppSettings {
   activityStatus: boolean;
@@ -20,21 +20,6 @@ const DEFAULTS: AppSettings = {
   quietHours: false,
   sounds: true,
 };
-
-const PREVIEW_KEY = 'bond.preview-settings.v1';
-
-function toStorage(s: AppSettings): string {
-  return JSON.stringify(s);
-}
-
-function fromStorage(): Partial<AppSettings> | null {
-  try {
-    const raw = window.localStorage.getItem(PREVIEW_KEY);
-    return raw ? (JSON.parse(raw) as Partial<AppSettings>) : null;
-  } catch {
-    return null;
-  }
-}
 
 function toJsonb(s: AppSettings): Record<string, unknown> {
   return {
@@ -59,15 +44,13 @@ export async function getAppSettings(userId: string): Promise<AppSettings> {
     const { data } = await supabase.from('user_settings').select('settings').eq('user_id', userId).maybeSingle();
     return FROM_JSONB(data?.settings as Record<string, unknown> | undefined);
   }
-  return { ...DEFAULTS, ...fromStorage() };
+  return { ...DEFAULTS };
 }
 
 export async function updateAppSettings(userId: string, patch: Partial<AppSettings>): Promise<AppSettings> {
   const next = { ...(await getAppSettings(userId)), ...patch };
   if (isBackendConfigured && supabase) {
     await supabase.from('user_settings').upsert({ user_id: userId, settings: toJsonb(next) });
-    return next;
   }
-  window.localStorage.setItem(PREVIEW_KEY, toStorage(next));
   return next;
 }

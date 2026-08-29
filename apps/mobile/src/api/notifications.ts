@@ -57,53 +57,6 @@ function bodyFor(type: string, payload: Record<string, unknown>): string {
   }
 }
 
-/* ================================================================== */
-/* Preview-mode demo data                                             */
-/* ================================================================== */
-
-let previewNotifications: AppNotification[] = [
-  {
-    id: 'n-1',
-    type: 'i_need_you',
-    title: 'Alice needs you',
-    body: 'They are asking for your attention.',
-    payload: { display_name: 'Alice', alert_id: 'iny-1' },
-    read: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 6).toISOString(),
-  },
-  {
-    id: 'n-2',
-    type: 'surprise',
-    title: 'Alice sent you a surprise',
-    body: 'A surprise box is waiting. It is not ready to open yet.',
-    payload: { display_name: 'Alice', box_id: 'sb-1' },
-    read: false,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
-  },
-  {
-    id: 'n-3',
-    type: 'connection',
-    title: 'Maya wants to connect',
-    body: 'Open Connections to review the request.',
-    payload: { display_name: 'Maya' },
-    read: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 26).toISOString(),
-  },
-  {
-    id: 'n-4',
-    type: 'moment',
-    title: 'Ben posted a moment',
-    body: 'Sunset from the hike 🔥',
-    payload: { display_name: 'Ben', moment_id: 'pmom-2', text: 'Sunset from the hike 🔥' },
-    read: true,
-    createdAt: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString(),
-  },
-];
-
-/* ================================================================== */
-/* API                                                                 */
-/* ================================================================== */
-
 /**
  * List the current user's in-app notifications (newest first).
  */
@@ -115,7 +68,7 @@ export async function listNotifications(userId: string): Promise<AppNotification
       .eq('user_id', userId)
       .order('created_at', { ascending: false })
       .limit(100);
-    if (error || !data) return previewNotifications.slice();
+    if (error || !data) return [];
     return (data as unknown as NotificationRow[]).map((r) => ({
       id: r.id,
       type: (r.type as NotificationType) ?? 'message',
@@ -126,7 +79,7 @@ export async function listNotifications(userId: string): Promise<AppNotification
       createdAt: r.created_at,
     }));
   }
-  return previewNotifications.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return [];
 }
 
 /**
@@ -135,10 +88,7 @@ export async function listNotifications(userId: string): Promise<AppNotification
 export async function markNotificationRead(userId: string, notificationId: string): Promise<void> {
   if (isBackendConfigured && supabase) {
     await supabase.from('notifications').update({ read: true }).eq('id', notificationId).eq('user_id', userId);
-    return;
   }
-  const n = previewNotifications.find((x) => x.id === notificationId);
-  if (n) n.read = true;
 }
 
 /**
@@ -147,14 +97,11 @@ export async function markNotificationRead(userId: string, notificationId: strin
 export async function markAllNotificationsRead(userId: string): Promise<void> {
   if (isBackendConfigured && supabase) {
     await supabase.from('notifications').update({ read: true }).eq('user_id', userId);
-    return;
   }
-  previewNotifications = previewNotifications.map((n) => ({ ...n, read: true }));
 }
 
 /**
- * Create a notification row (used by future server-side triggers; preview
- * mode just prepends locally).
+ * Create a notification row.
  */
 export async function createNotification(
   userId: string,
@@ -179,15 +126,5 @@ export async function createNotification(
       createdAt: r.created_at,
     };
   }
-  const n: AppNotification = {
-    id: `n-${Date.now()}`,
-    type,
-    title: titleFor(type, payload),
-    body: bodyFor(type, payload),
-    payload,
-    read: false,
-    createdAt: new Date().toISOString(),
-  };
-  previewNotifications.unshift(n);
-  return n;
+  return null;
 }

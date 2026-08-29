@@ -4,7 +4,7 @@ const BUCKET = 'bond-media';
 
 export interface UploadedMedia {
   objectName: string;
-  /** A URL that can be rendered (signed URL on backend, local URI in preview). */
+  /** A URL that can be rendered (signed URL on backend, local URI when unconfigured). */
   uri: string;
   mimeType: string;
 }
@@ -28,8 +28,8 @@ function extFor(mimeType: string): string {
  * `media` registry table so conversation/moment RLS can gate access, and return
  * a renderable (signed) URL.
  *
- * In preview mode (no backend) we no-op and return the original `file://` URI so
- * images still render in the demo.
+ * When the backend is unconfigured we no-op and return the original `file://`
+ * URI so images still render locally.
  */
 export async function uploadBondMedia(
   ownerId: string,

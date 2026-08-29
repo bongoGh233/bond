@@ -20,9 +20,8 @@ export type AuthResult =
 /**
  * Sign up a new user.
  *
- * Supabase mode: creates an auth user; the DB trigger auto-creates a profile
- * and user_settings row. Returns a session.
- * Preview mode: returns a local demo session.
+ * Creates an auth user; the DB trigger auto-creates a profile and
+ * user_settings row. Returns a session.
  */
 export async function signUp({ email, password, displayName, bondId }: SignUpInput): Promise<AuthResult> {
   if (isBackendConfigured && supabase) {
@@ -39,7 +38,7 @@ export async function signUp({ email, password, displayName, bondId }: SignUpInp
     return {
       ok: true,
       session: {
-        accessToken: data.session?.access_token ?? 'preview',
+        accessToken: data.session?.access_token ?? '',
         userId: user.id,
         email,
         displayName: displayName || undefined,
@@ -48,17 +47,7 @@ export async function signUp({ email, password, displayName, bondId }: SignUpInp
     };
   }
 
-  // Preview mode — local demo session.
-  return {
-    ok: true,
-    session: {
-      accessToken: 'preview-token',
-      userId: `local-${Date.now()}`,
-      email,
-      displayName: displayName || undefined,
-      bondId: bondId || undefined,
-    },
-  };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 export async function signIn({ email, password }: SignInInput): Promise<AuthResult> {
@@ -70,22 +59,14 @@ export async function signIn({ email, password }: SignInInput): Promise<AuthResu
     return {
       ok: true,
       session: {
-        accessToken: data.session?.access_token ?? 'preview',
+        accessToken: data.session?.access_token ?? '',
         userId: user.id,
         email,
       },
     };
   }
 
-  // Preview mode — accept any credentials for exploration.
-  return {
-    ok: true,
-    session: {
-      accessToken: 'preview-token',
-      userId: `local-${Date.now()}`,
-      email,
-    },
-  };
+  return { ok: false, error: 'Backend not configured' };
 }
 
 export async function signOutRemote(): Promise<void> {

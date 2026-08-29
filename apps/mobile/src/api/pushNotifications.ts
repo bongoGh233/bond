@@ -47,8 +47,7 @@ function deviceName(): string {
  * Request notification permission, fetch an Expo push token and upsert this
  * device's registration into `user_devices`.
  *
- * Native-only and a no-op in preview mode (no backend), matching the rest of
- * the API layer.
+ * Native-only and a no-op when the backend is not configured.
  */
 export async function registerPushToken(userId: string): Promise<{ ok: boolean; error?: string }> {
   if (!isBackendConfigured || !supabase) return { ok: true };

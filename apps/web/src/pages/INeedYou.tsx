@@ -151,7 +151,7 @@ export function INeedYou() {
             {busy ? 'Sending…' : '🚨 Send alert'}
           </button>
           <p className="muted" style={{ fontSize: '.74rem', marginTop: 8 }}>
-            {prefs.optIn ? "In preview you reach the demo connection directly." : 'You are currently opted out — others cannot alert you, but you can still reach out.'}
+            {prefs.optIn ? 'Pick an opted-in connection below — they are alerted instantly.' : 'You are currently opted out — others cannot alert you, but you can still reach out.'}
           </p>
         </div>
       </div>
